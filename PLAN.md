@@ -40,7 +40,7 @@ git init -b main
   - Implement Ed25519 identity keys, X25519 ephemeral handshake, commit-before-reveal 6-digit SAS derivation, signed `SessionGrant` structs, and SHA-256 hash-chained audit events.
   - **Exit Gate:** `proptest` runs 10,000+ state-machine sequences proving zero paths reach `GRANT_SIGNED_ACTIVE` without a valid host signature, and every negative transition (deny, 2m timeout, mismatch, key change, revoke) fails closed.
 
-- [ ] **Issue `#3`: `oud-policy` — Monotonic Policy Engine**
+- [x] **Issue `#3`: `oud-policy` — Monotonic Policy Engine**
   - Implement `Org -> Group -> Owner` strictest-wins merger across the 5 baseline rules (ask before connection, require matching code, unattended locked OFF in `v0.1`, file transfer off by default, idle timeout).
   - **Exit Gate:** Unit tests prove an owner or rogue config can never relax a stricter upstream rule.
 

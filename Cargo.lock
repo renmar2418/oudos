@@ -486,6 +486,13 @@ dependencies = [
 [[package]]
 name = "oud-policy"
 version = "0.1.0"
+dependencies = [
+ "oud-protocol",
+ "proptest",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
 
 [[package]]
 name = "oud-protocol"
