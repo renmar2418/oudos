@@ -1,9 +1,9 @@
 # Oudos Build Progress
 
 - **current_milestone:** `v0.1`
-- **current_issue:** `#6`
-- **status:** `READY_FOR_NEXT_CHAT` *(Allowed: READY | IN_PROGRESS | AWAITING_HUMAN_REVIEW | READY_FOR_NEXT_CHAT | BLOCKED | MILESTONE_COMPLETE)*
-- **issues_completed_this_session:** `3`
+- **current_issue:** `#8`
+- **status:** `AWAITING_HUMAN_REVIEW` *(Allowed: READY | IN_PROGRESS | AWAITING_HUMAN_REVIEW | READY_FOR_NEXT_CHAT | BLOCKED | MILESTONE_COMPLETE)*
+- **issues_completed_this_session:** `2`
 - **auto_advance:** `true`
 - **hard_stop_after_issues:** `#2, #7, #8, #12, #17, #20, #22`
 
@@ -13,6 +13,8 @@
 - **Issue `#3` (`e82432d`):** Implemented `oud-policy` monotonic policy engine (`Organisation -> Group -> DeviceOwner` + `v0.1` Asks-First lock, 5 baseline rules, `IdleTimeout` ranking, `PolicyLockProvenance`, `EffectivePolicy::clamp_permissions`, `merge_policies`, `merge_policies_strict`). Verified `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` (5 unit tests + 10,000-case `policy_proptest`).
 - **Issue `#4` (`910dc20`):** Implemented `oud-server` Axum + SQLite control plane (`auth.rs`, `db.rs`, `rate_limit.rs`, `signaling.rs`, `audit.rs`, `error.rs`, `lib.rs`, `main.rs`) with passkey/MFA auth, pre-paired server pubkey enrollment, 9-digit device registry & presence, fail-closed WebSocket signaling, 3-strike lockout, monotonic policy API, and verifiable hash-chained CSV audit export. Verified `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` (including 5 `server_integration` tests).
 - **Issue `#5` (`8e552cc`):** Implemented `apps/web-pwa` React + TypeScript + Tailwind v4 + Vite PWA (`FacingBracketsIcon`, `DevicesScreen`, `RequestingScreen`, `ActiveSessionScreen`, `PoliciesScreen`, `AuditLogScreen`, `manifest.webmanifest`, `sw.js`). Verified `pnpm typecheck`, `pnpm --dir apps/web-pwa run build`, and `pnpm --dir apps/web-pwa run test` (9/9 Vitest + `axe-core` WCAG 2.2 AA tests across all 5 core screens).
+- **Issue `#6` (`b617a4e`):** Added Add Device pairing wizard, `SessionsScreen`, `ScreenUnavailableCard` (4 causes + fixes), `OwnerDeniedCard`, `RequestExpiredCard` (real 2-min deadline), `CodeMismatchCard`, `DeviceKeyChangedAlert` (blocking TOFU halt + 9-digit re-pin recovery), `HostOfflineMidSession`, `SessionEndedSummary`, `ControlPlaneOfflineCard`, and `Ask to join`/`Notify me when online`; removed prototype approval simulation. Verified `pnpm typecheck`, `vite build`, `vitest run` (11/11), and `playwright test` (9/9 E2E tests covering all 10 edge states + Chromium `axe-core` WCAG 2.2 AA contrast).
+- **Issue `#7` (`dd0ae8f`):** Implemented `crates/oud-capture` (`windows_capture.rs`, `capture.rs`, `encoder.rs`, `gatekeeper.rs`, `ice_config.rs`, `preset.rs`, `telemetry.rs`, `webrtc_peer.rs`, `error.rs`, `tests/webrtc_pipeline.rs`) with Windows DXGI Desktop Duplication + GDI fallback, Media Foundation H.264 hardware discovery + `OpenH264` software fallback, `webrtc-rs` P2P/TURN (`Cloudflare` & `coturn`) pipeline, `Auto`/`Sharp`/`Fast` presets, and `SessionGrant` boundary gating (`blank_screen` locked `false`). Verified `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` (including `webrtc_loopback_1080p_auto_mode_meets_slos_and_enforces_grant_gating`: first frame `51.48 ms`, `p50=17.84 ms`, `p95=20.21 ms`, `54.4 fps`).
 
 ## Active Blockers
-- None
+- **Hard-Stop Security Review Gate (`#7`):** Paused for human security review of Windows capture & WebRTC media/gatekeeper boundary before proceeding to Issue `#8`.
