@@ -16,6 +16,10 @@ use uuid::Uuid;
 use crate::capture::Rect;
 use crate::error::CaptureError;
 
+/// Maximum number of queued synthetic-input audit records retained between flushes
+/// so sustained `SendInput` floods cannot cause unbounded heap growth.
+pub const MAX_PENDING_AUDIT_RECORDS: usize = 1024;
+
 /// Protected host surfaces shielded from remote and synthetic input.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -97,6 +101,21 @@ impl ProtectedSurfaceRegistry {
                 ProtectedSurfaceKind::ConsentPrompt => guard.consent_prompt = entry,
                 ProtectedSurfaceKind::SessionBanner => guard.session_banner = entry,
             }
+        }
+    }
+
+    /// Updates the bounding [`Rect`] for `surface` while preserving any already-registered Win32 `HWND`.
+    pub fn update_surface_rect(&self, surface: ProtectedSurfaceKind, rect: Rect) {
+        if let Ok(mut guard) = self.inner.lock() {
+            let slot = match surface {
+                ProtectedSurfaceKind::ConsentPrompt => &mut guard.consent_prompt,
+                ProtectedSurfaceKind::SessionBanner => &mut guard.session_banner,
+            };
+            let existing_hwnd = slot.and_then(|s| s.hwnd_raw);
+            *slot = Some(SurfaceRegistration {
+                rect,
+                hwnd_raw: existing_hwnd,
+            });
         }
     }
 
@@ -182,7 +201,9 @@ impl ProtectedSurfaceRegistry {
         Ok(())
     }
 
-    /// Records a blocked synthetic/protected input event into the metadata queue.
+    /// Records a blocked synthetic/protected input event into the bounded metadata queue.
+    ///
+    /// Always increments `total_blocked` even if `pending_audit` reaches [`MAX_PENDING_AUDIT_RECORDS`].
     pub fn record_block(
         &self,
         surface: ProtectedSurfaceKind,
@@ -191,11 +212,13 @@ impl ProtectedSurfaceRegistry {
     ) {
         if let Ok(mut guard) = self.inner.lock() {
             guard.total_blocked.fetch_add(1, Ordering::Relaxed);
-            guard.pending_audit.push(SyntheticBlockRecord {
-                timestamp_utc,
-                surface,
-                reason,
-            });
+            if guard.pending_audit.len() < MAX_PENDING_AUDIT_RECORDS {
+                guard.pending_audit.push(SyntheticBlockRecord {
+                    timestamp_utc,
+                    surface,
+                    reason,
+                });
+            }
         }
     }
 
@@ -675,6 +698,54 @@ mod tests {
         assert!(!is_synthetic_keyboard_flags(0));
         assert!(is_synthetic_keyboard_flags(0x0000_0010)); // LLKHF_INJECTED
         assert!(is_synthetic_keyboard_flags(0x0000_0002)); // LLKHF_LOWER_IL_INJECTED
+    }
+
+    #[test]
+    fn update_surface_rect_preserves_existing_hwnd_and_caps_pending_audit_queue() {
+        let registry = ProtectedSurfaceRegistry::new();
+        registry.set_surface(
+            ProtectedSurfaceKind::SessionBanner,
+            Rect {
+                x: 100,
+                y: 12,
+                width: 640,
+                height: 56,
+            },
+            Some(0xBEEF),
+        );
+        registry.update_surface_rect(
+            ProtectedSurfaceKind::SessionBanner,
+            Rect {
+                x: 240,
+                y: 16,
+                width: 640,
+                height: 56,
+            },
+        );
+        assert_eq!(
+            registry.get_rect(ProtectedSurfaceKind::SessionBanner),
+            Some(Rect {
+                x: 240,
+                y: 16,
+                width: 640,
+                height: 56,
+            })
+        );
+        assert_eq!(
+            registry.active_keyboard_surface_for_hwnd(0xBEEF),
+            Some(ProtectedSurfaceKind::SessionBanner)
+        );
+
+        let now = Utc::now();
+        let total = MAX_PENDING_AUDIT_RECORDS + 50;
+        for _ in 0..total {
+            registry.record_block(ProtectedSurfaceKind::SessionBanner, "llmhf_injected", now);
+        }
+        assert_eq!(registry.total_blocked(), total as u64);
+        assert_eq!(
+            registry.drain_blocked_records().len(),
+            MAX_PENDING_AUDIT_RECORDS
+        );
     }
 
     #[cfg(target_os = "windows")]

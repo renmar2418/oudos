@@ -32,7 +32,9 @@ export const PersistentSessionBanner: React.FC<PersistentSessionBannerProps> = (
         </span>
         <div className="min-w-0 truncate text-sm">
           <span className="font-semibold text-white">
-            {banner.status_label} · {banner.requester_name} ({banner.server_domain})
+            {banner.status_label} ·{" "}
+            <span data-testid="banner-requester-name">&ldquo;{banner.requester_name}&rdquo;</span>{" "}
+            (<span data-testid="banner-server-domain">{banner.server_domain}</span>)
           </span>
           <span className="ml-2 text-[#C4CCC8]">· {banner.permission_summary}</span>
         </div>

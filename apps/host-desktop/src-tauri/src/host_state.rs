@@ -31,6 +31,49 @@ use crate::tray::TrayVisualState;
 pub const CONSENT_CARD_WIDTH: u32 = 520;
 /// Protected consent window height in logical pixels.
 pub const CONSENT_CARD_HEIGHT: u32 = 660;
+/// Maximum display length for a sanitized requester identity label.
+pub const MAX_REQUESTER_NAME_CHARS: usize = 48;
+/// Maximum ASCII length for a validated `server_domain` hostname.
+pub const MAX_SERVER_DOMAIN_CHARS: usize = 253;
+
+/// Window close policy evaluated when the OS requests closing `"banner"` or `"consent"`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WindowCloseAction {
+    /// Prevent closing and keep the window visible (active persistent banner).
+    PreventAndKeepVisible,
+    /// Prevent destroying the window and hide it back to tray.
+    PreventAndHide,
+    /// Prevent destroying the consent window, hide it, and fail closed (`OwnerDenied`).
+    PreventHideAndDenyPending,
+    /// Allow close for unrelated windows.
+    AllowClose,
+}
+
+/// Decides how Tauri's `WindowEvent::CloseRequested` must respond for protected windows.
+#[must_use]
+pub fn decide_window_close_action(
+    window_label: &str,
+    has_pending_consent: bool,
+    has_active_banner: bool,
+) -> WindowCloseAction {
+    match window_label {
+        "banner" => {
+            if has_active_banner {
+                WindowCloseAction::PreventAndKeepVisible
+            } else {
+                WindowCloseAction::PreventAndHide
+            }
+        }
+        "consent" => {
+            if has_pending_consent {
+                WindowCloseAction::PreventHideAndDenyPending
+            } else {
+                WindowCloseAction::PreventAndHide
+            }
+        }
+        _ => WindowCloseAction::AllowClose,
+    }
+}
 
 /// Origin of a user-facing action on the host consent card or session banner.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -314,7 +357,7 @@ impl HostDesktopState {
     /// invalid state transitions, updating tray state to `Alert` and appending audit records.
     pub fn receive_incoming_request(
         &mut self,
-        params: IncomingRequestParams,
+        params: &IncomingRequestParams,
         now: DateTime<Utc>,
     ) -> Result<HostSnapshot, CaptureError> {
         if matches!(
@@ -329,10 +372,27 @@ impl HostDesktopState {
         }
 
         let viewer_pubkey = params.viewer_keys.public_key();
+        let server_domain = match validate_server_domain(&params.server_domain) {
+            Ok(d) => d,
+            Err(err) => {
+                self.tray_state = TrayVisualState::Alert;
+                self.alert_message = Some(err.to_string());
+                return Err(err);
+            }
+        };
+        let requester_name = match sanitize_requester_name(&params.requester_name) {
+            Ok(name) => name,
+            Err(err) => {
+                self.tray_state = TrayVisualState::Alert;
+                self.alert_message = Some(err.to_string());
+                return Err(err);
+            }
+        };
+
         let req_res = self.consent_machine.apply(ConsentEvent::RequestIncoming {
             session_id: params.session_id,
             viewer_pubkey,
-            server_domain: params.server_domain.clone(),
+            server_domain: server_domain.clone(),
             authenticated_requester: params.authenticated_requester,
             server_enrolled: params.server_enrolled,
             rate_limit_passed: params.rate_limit_passed,
@@ -348,7 +408,7 @@ impl HostDesktopState {
                 let _ = self.append_audit(
                     params.session_id,
                     viewer_pubkey,
-                    &params.server_domain,
+                    &server_domain,
                     AuditEventKind::BlockedSecurityAlert { reason },
                     now,
                 );
@@ -359,17 +419,14 @@ impl HostDesktopState {
         let _ = self.append_audit(
             params.session_id,
             viewer_pubkey,
-            &params.server_domain,
+            &server_domain,
             AuditEventKind::SessionRequested,
             now,
         );
 
         // Execute genuine local commit-before-reveal X25519 + Ed25519 key agreement for SAS.
-        let (init, offer) = InitiatorPending::initiate(
-            params.session_id,
-            &params.server_domain,
-            &params.viewer_keys,
-        );
+        let (init, offer) =
+            InitiatorPending::initiate(params.session_id, &server_domain, &params.viewer_keys);
         let (resp, accept) = ResponderPending::respond(&offer, &self.host_keys)?;
         let (reveal, viewer_out) = init.complete(&accept, Some(&self.host_keys.public_key()))?;
         let host_out = resp.verify_reveal_and_finalize(&reveal)?;
@@ -391,9 +448,9 @@ impl HostDesktopState {
         let _ = params.requested_permissions;
         self.pending = Some(PendingSessionInternal {
             session_id: params.session_id,
-            requester_name: params.requester_name,
+            requester_name,
             viewer_pubkey,
-            server_domain: params.server_domain,
+            server_domain,
             server_enrolled: params.server_enrolled,
             derived_sas: host_out.sas_code.clone(),
             first_time_requester: params.first_time_requester,
@@ -742,7 +799,24 @@ impl HostDesktopState {
         rect: Rect,
         hwnd_raw: Option<isize>,
     ) {
-        self.protected_surfaces.set_surface(surface, rect, hwnd_raw);
+        if let Some(hwnd) = hwnd_raw {
+            self.protected_surfaces
+                .set_surface(surface, rect, Some(hwnd));
+        } else {
+            self.protected_surfaces.update_surface_rect(surface, rect);
+        }
+    }
+
+    /// Returns whether a pending consent prompt is currently active.
+    #[must_use]
+    pub const fn has_pending_request(&self) -> bool {
+        self.pending.is_some()
+    }
+
+    /// Returns whether an active remote session banner is currently mounted.
+    #[must_use]
+    pub const fn has_active_banner(&self) -> bool {
+        self.active.is_some()
     }
 
     /// Triggers an explicit alert tray state (e.g. control plane error or TOFU alert).
@@ -904,6 +978,95 @@ impl HostDesktopState {
         )?;
         Ok(())
     }
+}
+
+/// Sanitizes requester display identity: strips control chars, bidi overrides, zero-width chars,
+/// and trust-badge delimiters, caps length at [`MAX_REQUESTER_NAME_CHARS`], and rejects any
+/// verification-spoof claim (`"verified"`).
+///
+/// # Errors
+/// Returns [`CaptureError::GrantError`] if empty or containing `"verified"` spoofing markers.
+pub fn sanitize_requester_name(raw: &str) -> Result<String, CaptureError> {
+    let cleaned_chars: String = raw
+        .chars()
+        .filter(|&c| !is_forbidden_identity_char(c))
+        .map(|c| match c {
+            '(' | ')' | '[' | ']' | '{' | '}' | '·' => ' ',
+            other => other,
+        })
+        .collect();
+
+    let collapsed = cleaned_chars
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if collapsed.is_empty() {
+        return Err(CaptureError::GrantError(ProtocolError::V01PolicyViolation(
+            "requester_name must not be empty",
+        )));
+    }
+    if collapsed.to_ascii_lowercase().contains("verified") {
+        return Err(CaptureError::GrantError(ProtocolError::V01PolicyViolation(
+            "requester_name cannot contain verification claim",
+        )));
+    }
+
+    let capped: String = collapsed.chars().take(MAX_REQUESTER_NAME_CHARS).collect();
+    let trimmed = capped.trim_end().to_owned();
+    if trimmed.is_empty() {
+        return Err(CaptureError::GrantError(ProtocolError::V01PolicyViolation(
+            "requester_name must not be empty",
+        )));
+    }
+    Ok(trimmed)
+}
+
+/// Validates a strict lowercase ASCII DNS `server_domain` (`<= 253` chars, no whitespace,
+/// userinfo, paths, or spoofed trust labels).
+///
+/// # Errors
+/// Returns [`CaptureError::GrantError`] on malformed or non-ASCII domain values.
+pub fn validate_server_domain(raw: &str) -> Result<String, CaptureError> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty()
+        || trimmed.len() > MAX_SERVER_DOMAIN_CHARS
+        || !trimmed.is_ascii()
+        || trimmed.chars().any(is_forbidden_identity_char)
+    {
+        return Err(CaptureError::GrantError(ProtocolError::V01PolicyViolation(
+            "invalid server_domain hostname",
+        )));
+    }
+
+    let normalized = trimmed.to_ascii_lowercase();
+    if !normalized.contains('.') {
+        return Err(CaptureError::GrantError(ProtocolError::V01PolicyViolation(
+            "server_domain must be a valid DNS hostname",
+        )));
+    }
+    for label in normalized.split('.') {
+        if label.is_empty()
+            || label.len() > 63
+            || label.starts_with('-')
+            || label.ends_with('-')
+            || !label
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        {
+            return Err(CaptureError::GrantError(ProtocolError::V01PolicyViolation(
+                "invalid server_domain hostname label",
+            )));
+        }
+    }
+    Ok(normalized)
+}
+
+fn is_forbidden_identity_char(c: char) -> bool {
+    c.is_control()
+        || matches!(
+            c,
+            '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}' | '\u{FEFF}'
+        )
 }
 
 /// Formats a 6-digit SAS string (`"739204"`) with a center space (`"739 204"`).

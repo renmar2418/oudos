@@ -111,7 +111,10 @@ export const ConsentPromptCard: React.FC<ConsentPromptCardProps> = ({
         <div className="flex items-start justify-between gap-3">
           <div>
             <h1 id="consent-card-heading" className="font-display text-xl font-semibold text-[#14181B]">
-              {request.requester_name} wants to see your screen
+              <span data-testid="consent-requester-name" className="break-words">
+                &ldquo;{request.requester_name}&rdquo;
+              </span>{" "}
+              wants to see your screen
             </h1>
             <p className="mt-1 text-sm text-[#4A524E]">
               Nothing is shared until you click Allow. You can end this session at any time.

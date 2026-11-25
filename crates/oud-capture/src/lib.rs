@@ -27,7 +27,7 @@ pub use gatekeeper::HostFrameGatekeeper;
 pub use ice_config::{IceConfig, TransportMode, TurnFallbackConfig, DEFAULT_STUN_URL};
 pub use input_isolation::{
     is_synthetic_keyboard_flags, is_synthetic_mouse_flags, point_in_rect, ProtectedSurfaceKind,
-    ProtectedSurfaceRegistry, SyntheticBlockRecord,
+    ProtectedSurfaceRegistry, SyntheticBlockRecord, MAX_PENDING_AUDIT_RECORDS,
 };
 #[cfg(target_os = "windows")]
 pub use input_isolation::{query_window_rect, WindowsInputGuard};

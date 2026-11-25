@@ -235,7 +235,9 @@ describe("Oudos host-desktop Consent UI, Banner & Tray", () => {
     );
 
     const banner = screen.getByTestId("persistent-session-banner");
-    expect(banner).toHaveTextContent("LIVE · Alex Rivera (support.example.org)");
+    expect(banner).toHaveTextContent("LIVE ·");
+    expect(screen.getByTestId("banner-requester-name")).toHaveTextContent("Alex Rivera");
+    expect(screen.getByTestId("banner-server-domain")).toHaveTextContent("support.example.org");
     expect(banner).toHaveTextContent("Screen + Input");
 
     await act(async () => {

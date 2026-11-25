@@ -19,7 +19,8 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State};
 use uuid::Uuid;
 
 use crate::host_state::{
-    HostDesktopState, HostPermissionSelection, HostSnapshot, IncomingRequestParams, InputOrigin,
+    decide_window_close_action, HostDesktopState, HostPermissionSelection, HostSnapshot,
+    IncomingRequestParams, InputOrigin, WindowCloseAction,
 };
 use crate::tray::{render_tray_rgba, TrayVisualState};
 
@@ -119,7 +120,7 @@ fn present_incoming_request(
             .lock()
             .map_err(|_| "host state lock poisoned".to_owned())?;
         let res = guard.receive_incoming_request(
-            IncomingRequestParams {
+            &IncomingRequestParams {
                 session_id: Uuid::now_v7(),
                 requester_name: payload.requester_name,
                 viewer_keys: IdentityKeyPair::generate(),
@@ -336,7 +337,38 @@ fn sync_window_rect_to_registry(
             None
         }
     };
+    let outer_pos = win.outer_position().ok().map(|p| (p.x, p.y));
+    let outer_size = win.outer_size().ok().map(|s| (s.width, s.height));
+    apply_window_rect_update(state, surface, hwnd_raw, outer_pos, outer_size);
+}
 
+fn sync_raw_window_rect_to_registry(
+    win: &tauri::Window,
+    state: &SharedHostState,
+    surface: ProtectedSurfaceKind,
+) {
+    let hwnd_raw: Option<isize> = {
+        #[cfg(target_os = "windows")]
+        {
+            win.hwnd().ok().map(|h| h.0 as isize)
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            None
+        }
+    };
+    let outer_pos = win.outer_position().ok().map(|p| (p.x, p.y));
+    let outer_size = win.outer_size().ok().map(|s| (s.width, s.height));
+    apply_window_rect_update(state, surface, hwnd_raw, outer_pos, outer_size);
+}
+
+fn apply_window_rect_update(
+    state: &SharedHostState,
+    surface: ProtectedSurfaceKind,
+    hwnd_raw: Option<isize>,
+    outer_pos: Option<(i32, i32)>,
+    outer_size: Option<(u32, u32)>,
+) {
     #[cfg(target_os = "windows")]
     if let Some(hwnd) = hwnd_raw {
         if let Ok(rect) = oud_capture::query_window_rect(hwnd) {
@@ -347,20 +379,98 @@ fn sync_window_rect_to_registry(
         }
     }
 
-    if let (Ok(pos), Ok(size)) = (win.outer_position(), win.outer_size()) {
+    if let (Some((x, y)), Some((width, height))) = (outer_pos, outer_size) {
         if let Ok(guard) = state.inner.lock() {
             guard.set_protected_surface_rect(
                 surface,
                 Rect {
-                    x: pos.x,
-                    y: pos.y,
-                    width: size.width,
-                    height: size.height,
+                    x,
+                    y,
+                    width,
+                    height,
                 },
                 hwnd_raw,
             );
         }
     }
+}
+
+fn setup_host_agent(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let show_item = MenuItem::with_id(app, "show_host", "Show Oudos Host", true, None::<&str>)?;
+    let end_item = MenuItem::with_id(app, "end_session", "End session", false, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", "Quit Oudos", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show_item, &end_item, &quit_item])?;
+
+    let initial_snap = {
+        let host_state = app.state::<SharedHostState>();
+        host_state.inner.lock().ok().map(|g| g.snapshot(Utc::now()))
+    };
+    let initial_tray_state = initial_snap
+        .as_ref()
+        .map_or(TrayVisualState::Idle, |s| s.tray_state);
+    let initial_tooltip = initial_snap
+        .as_ref()
+        .and_then(|s| s.alert_message.as_ref())
+        .filter(|_| initial_tray_state == TrayVisualState::Alert)
+        .map_or_else(
+            || format!("Oudos — {}", initial_tray_state.label()),
+            |msg| format!("Oudos — Alert ({msg})"),
+        );
+
+    let tray = TrayIconBuilder::with_id(TRAY_ID)
+        .icon(Image::new_owned(
+            render_tray_rgba(initial_tray_state),
+            32,
+            32,
+        ))
+        .tooltip(&initial_tooltip)
+        .menu(&menu)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "show_host" => {
+                if let Some(win) = app.get_webview_window("consent") {
+                    let _ = win.show();
+                    let _ = win.set_focus();
+                }
+            }
+            "end_session" => {
+                let host_state = app.state::<SharedHostState>();
+                let tray_ui = app.state::<Mutex<TrayUiHandle>>();
+                let snap_res =
+                    host_state.inner.lock().ok().and_then(|mut g| {
+                        g.end_session_local(InputOrigin::LocalHost, Utc::now()).ok()
+                    });
+                if let Some(snap) = snap_res {
+                    sync_windows_and_tray(app, &host_state, &tray_ui, &snap);
+                }
+            }
+            "quit" => {
+                app.exit(0);
+            }
+            _ => {}
+        })
+        .build(app)?;
+
+    app.manage(Mutex::new(TrayUiHandle {
+        tray,
+        end_session_item: end_item,
+    }));
+
+    let app_handle = app.handle().clone();
+    std::thread::spawn(move || loop {
+        std::thread::sleep(Duration::from_millis(500));
+        let host_state = app_handle.state::<SharedHostState>();
+        let tray_ui = app_handle.state::<Mutex<TrayUiHandle>>();
+        let snap_opt = host_state
+            .inner
+            .lock()
+            .ok()
+            .map(|mut guard| guard.tick(Utc::now()));
+        if let Some(snap) = snap_opt {
+            sync_windows_and_tray(&app_handle, &host_state, &tray_ui, &snap);
+        }
+    });
+
+    Ok(())
 }
 
 /// Boots the Oudos Tauri v2 Host Desktop agent.
@@ -369,15 +479,23 @@ fn sync_window_rect_to_registry(
 /// Panics only if Tauri runtime initialization fails.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let initial_state = HostDesktopState::with_default_policy(IdentityKeyPair::generate());
+    let mut initial_state = HostDesktopState::with_default_policy(IdentityKeyPair::generate());
     let registry = initial_state.protected_surfaces();
-    let shared_inner = Arc::new(Mutex::new(initial_state));
 
     #[cfg(target_os = "windows")]
-    let input_guard = oud_capture::WindowsInputGuard::install(registry).ok();
+    let input_guard = match oud_capture::WindowsInputGuard::install(registry) {
+        Ok(guard) => Some(guard),
+        Err(err) => {
+            initial_state.raise_alert(format!(
+                "Protected input guard failed to start ({err}); restart Oudos host before approving connections."
+            ));
+            None
+        }
+    };
     #[cfg(not(target_os = "windows"))]
     let _ = registry;
 
+    let shared_inner = Arc::new(Mutex::new(initial_state));
     let shared_state = SharedHostState {
         inner: Arc::clone(&shared_inner),
         #[cfg(target_os = "windows")]
@@ -386,70 +504,8 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(shared_state)
-        .setup(|app| {
-            let show_item =
-                MenuItem::with_id(app, "show_host", "Show Oudos Host", true, None::<&str>)?;
-            let end_item =
-                MenuItem::with_id(app, "end_session", "End session", false, None::<&str>)?;
-            let quit_item = MenuItem::with_id(app, "quit", "Quit Oudos", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show_item, &end_item, &quit_item])?;
-
-            let tray = TrayIconBuilder::with_id(TRAY_ID)
-                .icon(Image::new_owned(
-                    render_tray_rgba(TrayVisualState::Idle),
-                    32,
-                    32,
-                ))
-                .tooltip("Oudos — Idle")
-                .menu(&menu)
-                .on_menu_event(|app, event| match event.id.as_ref() {
-                    "show_host" => {
-                        if let Some(win) = app.get_webview_window("consent") {
-                            let _ = win.show();
-                            let _ = win.set_focus();
-                        }
-                    }
-                    "end_session" => {
-                        let host_state = app.state::<SharedHostState>();
-                        let tray_ui = app.state::<Mutex<TrayUiHandle>>();
-                        let snap_res = {
-                            host_state.inner.lock().ok().and_then(|mut g| {
-                                g.end_session_local(InputOrigin::LocalHost, Utc::now()).ok()
-                            })
-                        };
-                        if let Some(snap) = snap_res {
-                            sync_windows_and_tray(app, &host_state, &tray_ui, &snap);
-                        }
-                    }
-                    "quit" => {
-                        app.exit(0);
-                    }
-                    _ => {}
-                })
-                .build(app)?;
-
-            app.manage(Mutex::new(TrayUiHandle {
-                tray,
-                end_session_item: end_item,
-            }));
-
-            let app_handle = app.handle().clone();
-            std::thread::spawn(move || loop {
-                std::thread::sleep(Duration::from_millis(500));
-                let host_state = app_handle.state::<SharedHostState>();
-                let tray_ui = app_handle.state::<Mutex<TrayUiHandle>>();
-                let snap_opt = host_state
-                    .inner
-                    .lock()
-                    .ok()
-                    .map(|mut guard| guard.tick(Utc::now()));
-                if let Some(snap) = snap_opt {
-                    sync_windows_and_tray(&app_handle, &host_state, &tray_ui, &snap);
-                }
-            });
-
-            Ok(())
-        })
+        .on_window_event(handle_window_event)
+        .setup(setup_host_agent)
         .invoke_handler(tauri::generate_handler![
             get_host_snapshot,
             tick_host_state,
@@ -462,4 +518,62 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running Oudos host desktop application");
+}
+
+fn handle_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
+    let app = window.app_handle();
+    let host_state = app.state::<SharedHostState>();
+
+    match event {
+        tauri::WindowEvent::Moved(_)
+        | tauri::WindowEvent::Resized(_)
+        | tauri::WindowEvent::ScaleFactorChanged { .. } => {
+            let active_surface =
+                host_state
+                    .inner
+                    .lock()
+                    .ok()
+                    .and_then(|guard| match window.label() {
+                        "consent" if guard.has_pending_request() => {
+                            Some(ProtectedSurfaceKind::ConsentPrompt)
+                        }
+                        "banner" if guard.has_active_banner() => {
+                            Some(ProtectedSurfaceKind::SessionBanner)
+                        }
+                        _ => None,
+                    });
+            if let Some(surface) = active_surface {
+                sync_raw_window_rect_to_registry(window, &host_state, surface);
+            }
+        }
+        tauri::WindowEvent::CloseRequested { api, .. } => {
+            let (has_pending, has_active) = host_state.inner.lock().map_or((false, false), |g| {
+                (g.has_pending_request(), g.has_active_banner())
+            });
+            match decide_window_close_action(window.label(), has_pending, has_active) {
+                WindowCloseAction::PreventAndKeepVisible => {
+                    api.prevent_close();
+                }
+                WindowCloseAction::PreventAndHide => {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+                WindowCloseAction::PreventHideAndDenyPending => {
+                    api.prevent_close();
+                    let _ = window.hide();
+                    let denied_snap = host_state
+                        .inner
+                        .lock()
+                        .ok()
+                        .and_then(|mut g| g.deny_session(Utc::now()).ok());
+                    if let Some(snap) = denied_snap {
+                        let tray_ui = app.state::<Mutex<TrayUiHandle>>();
+                        sync_windows_and_tray(app, &host_state, &tray_ui, &snap);
+                    }
+                }
+                WindowCloseAction::AllowClose => {}
+            }
+        }
+        _ => {}
+    }
 }

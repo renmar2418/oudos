@@ -4,7 +4,9 @@
 use chrono::{Duration, Utc};
 use oud_capture::{CaptureError, HostInboundMessage, ProtectedSurfaceKind, Rect};
 use oud_host_desktop::host_state::{
-    HostDesktopState, HostPermissionSelection, IncomingRequestParams, InputOrigin,
+    decide_window_close_action, sanitize_requester_name, validate_server_domain, HostDesktopState,
+    HostPermissionSelection, IncomingRequestParams, InputOrigin, WindowCloseAction,
+    MAX_REQUESTER_NAME_CHARS,
 };
 use oud_host_desktop::tray::{
     encode_rgba_ico_32, encode_rgba_png, render_monochrome_brackets_rgba, render_tray_rgba,
@@ -107,7 +109,7 @@ fn first_time_requester_enforces_5s_cooling_off_and_rejects_remote_allow() {
     let t0 = Utc::now();
 
     let snap = state
-        .receive_incoming_request(sample_request(true, true), t0)
+        .receive_incoming_request(&sample_request(true, true), t0)
         .expect("incoming request accepted");
     assert_eq!(snap.tray_state, TrayVisualState::Idle);
     assert_eq!(snap.consent_state_name, "COOLING_OFF_5S");
@@ -153,7 +155,7 @@ fn activate_sample_session(
     let host_pubkey = host_keys.public_key();
     let mut state = HostDesktopState::with_default_policy(host_keys);
     state
-        .receive_incoming_request(sample_request(true, true), now)
+        .receive_incoming_request(&sample_request(true, true), now)
         .expect("incoming request accepted");
     (state, host_pubkey)
 }
@@ -289,7 +291,7 @@ fn unenrolled_server_triggers_alert_tray_and_blocks_consent() {
     let host_keys = IdentityKeyPair::generate();
     let host_pubkey = host_keys.public_key();
     let mut state = HostDesktopState::with_default_policy(host_keys);
-    let res = state.receive_incoming_request(sample_request(false, false), Utc::now());
+    let res = state.receive_incoming_request(&sample_request(false, false), Utc::now());
     assert!(matches!(
         res,
         Err(CaptureError::GrantError(ProtocolError::ServerNotEnrolled))
@@ -298,4 +300,68 @@ fn unenrolled_server_triggers_alert_tray_and_blocks_consent() {
     assert_eq!(snap.tray_state, TrayVisualState::Alert);
     assert!(snap.pending_request.is_none());
     assert!(verify_chain(state.audit_chain().entries(), &host_pubkey).is_ok());
+}
+
+#[test]
+fn requester_spoofing_newlines_bidi_and_oversize_inputs_are_sanitized_or_rejected() {
+    // Trust-badge spoofing including zero-width/bidi evasion must fail closed.
+    for spoof in [
+        "Your Bank (Verified)",
+        "Support [VERIFIED]",
+        "Bank \u{200B}(Ver\u{202E}ified)",
+        "Your Bank\r\n(Ver\nified)",
+    ] {
+        assert!(
+            sanitize_requester_name(spoof).is_err(),
+            "spoof requester `{spoof}` must be rejected"
+        );
+    }
+
+    // Newlines, carriage returns, bidi overrides, and parentheses are stripped and capped <= 48 chars.
+    let noisy = format!("Alex\r\n\u{202E}Rivera (Support) {}", "X".repeat(80));
+    let cleaned = sanitize_requester_name(&noisy).expect("benign name sanitized");
+    assert!(cleaned.chars().count() <= MAX_REQUESTER_NAME_CHARS);
+    assert!(!cleaned.contains(['\r', '\n', '\u{202E}', '(', ')']));
+    assert!(cleaned.starts_with("AlexRivera Support"));
+
+    // Invalid / spoofed server_domain values fail closed.
+    assert!(validate_server_domain("support.example.org (Verified)").is_err());
+    assert!(validate_server_domain("bank.com@evil.example").is_err());
+    assert!(validate_server_domain(&format!("{}.example.org", "a".repeat(250))).is_err());
+    assert_eq!(
+        validate_server_domain(" Support.Example.Org ").expect("valid hostname"),
+        "support.example.org"
+    );
+
+    // End-to-end receive_incoming_request rejects "Your Bank (Verified)" and sets Alert tray state.
+    let host_keys = IdentityKeyPair::generate();
+    let mut state = HostDesktopState::with_default_policy(host_keys);
+    let mut bad_req = sample_request(true, true);
+    bad_req.requester_name = "Your Bank (Verified)".to_owned();
+    assert!(state
+        .receive_incoming_request(&bad_req, Utc::now())
+        .is_err());
+    let snap = state.snapshot(Utc::now());
+    assert_eq!(snap.tray_state, TrayVisualState::Alert);
+    assert!(snap.pending_request.is_none());
+}
+
+#[test]
+fn close_requested_guard_prevents_banner_dismissal_and_denies_pending_consent() {
+    assert_eq!(
+        decide_window_close_action("banner", false, true),
+        WindowCloseAction::PreventAndKeepVisible
+    );
+    assert_eq!(
+        decide_window_close_action("banner", false, false),
+        WindowCloseAction::PreventAndHide
+    );
+    assert_eq!(
+        decide_window_close_action("consent", true, false),
+        WindowCloseAction::PreventHideAndDenyPending
+    );
+    assert_eq!(
+        decide_window_close_action("consent", false, false),
+        WindowCloseAction::PreventAndHide
+    );
 }
