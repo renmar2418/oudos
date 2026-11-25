@@ -44,7 +44,7 @@ git init -b main
   - Implement `Org -> Group -> Owner` strictest-wins merger across the 5 baseline rules (ask before connection, require matching code, unattended locked OFF in `v0.1`, file transfer off by default, idle timeout).
   - **Exit Gate:** Unit tests prove an owner or rogue config can never relax a stricter upstream rule.
 
-- [ ] **Issue `#4`: `oud-server` — Control Plane, Signaling & Audit API**
+- [x] **Issue `#4`: `oud-server` — Control Plane, Signaling & Audit API**
   - Build Axum + SQLite backend: passkey/MFA auth, pre-paired server public-key enrollment, 9-digit device registry, live presence (`Online`/`In session`/`Offline`), WebSocket SDP/ICE signaling, per-requester/device rate limiting, and append-only audit log with CSV export.
   - **Exit Gate:** Integration tests verify enrollment, rate-limit lockout, fail-closed refusal when signaling drops, and verifiable hash-chained CSV export.
 

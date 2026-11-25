@@ -214,7 +214,14 @@ pub fn verify_chain(
     Ok(())
 }
 
-fn compute_entry_hash(prev_hash: &[u8; 32], event: &AuditEvent) -> Result<[u8; 32], ProtocolError> {
+/// Computes `SHA-256(prev_hash || CanonicalJSON(event))`.
+///
+/// # Errors
+/// Returns [`ProtocolError::SerializationError`] if `event` cannot be serialized.
+pub fn compute_entry_hash(
+    prev_hash: &[u8; 32],
+    event: &AuditEvent,
+) -> Result<[u8; 32], ProtocolError> {
     let canonical_json =
         serde_json::to_vec(event).map_err(|e| ProtocolError::SerializationError(e.to_string()))?;
     let mut hasher = Sha256::new();
