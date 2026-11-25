@@ -48,7 +48,7 @@ git init -b main
   - Build Axum + SQLite backend: passkey/MFA auth, pre-paired server public-key enrollment, 9-digit device registry, live presence (`Online`/`In session`/`Offline`), WebSocket SDP/ICE signaling, per-requester/device rate limiting, and append-only audit log with CSV export.
   - **Exit Gate:** Integration tests verify enrollment, rate-limit lockout, fail-closed refusal when signaling drops, and verifiable hash-chained CSV export.
 
-- [ ] **Issue `#5`: `web-pwa` — Design System & Core 5 Screens**
+- [x] **Issue `#5`: `web-pwa` — Design System & Core 5 Screens**
   - Build React + TS + Tailwind + Vite PWA implementing Devices, Requesting/Waiting (6-digit SAS + 2-min countdown), Active Session dark viewer (`#0E1214`, quality selector, latency, `Send Shortcuts`), Policies (with admin lock icons), and Audit Log (filters + CSV download).
   - **Exit Gate:** Lighthouse PWA check passes; `axe-core` reports zero critical WCAG 2.2 AA violations.
 
