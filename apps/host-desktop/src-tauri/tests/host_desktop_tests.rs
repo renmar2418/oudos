@@ -2,7 +2,10 @@
 //! persistent banner enforcement, local-only grant revocation, and protected rect isolation.
 
 use chrono::{Duration, Utc};
-use oud_capture::{CaptureError, HostInboundMessage, ProtectedSurfaceKind, Rect};
+use oud_capture::{
+    chunk_file_bytes, CaptureError, ClipboardEndpoint, HostInboundMessage, ProtectedSurfaceKind,
+    Rect,
+};
 use oud_host_desktop::host_state::{
     decide_window_close_action, sanitize_requester_name, validate_server_domain, HostDesktopState,
     HostPermissionSelection, IncomingRequestParams, InputOrigin, WindowCloseAction,
@@ -12,8 +15,9 @@ use oud_host_desktop::tray::{
     encode_rgba_ico_32, encode_rgba_png, render_monochrome_brackets_rgba, render_tray_rgba,
     TrayVisualState, MONOCHROME_BUNDLE_INK,
 };
-use oud_protocol::audit::verify_chain;
-use oud_protocol::grant::{FrameKind, GrantDuration};
+use oud_policy::PolicyLayer;
+use oud_protocol::audit::{verify_chain, AuditEventKind};
+use oud_protocol::grant::{ClipboardDirection, FrameKind, GrantDuration};
 use oud_protocol::identity::IdentityKeyPair;
 use oud_protocol::ProtocolError;
 use uuid::Uuid;
@@ -364,4 +368,161 @@ fn close_requested_guard_prevents_banner_dismissal_and_denies_pending_consent() 
         decide_window_close_action("consent", false, false),
         WindowCloseAction::PreventAndHide
     );
+}
+
+#[test]
+fn host_clipboard_direction_fails_closed_and_logs_metadata_only() {
+    let t0 = Utc::now();
+    let (mut state, host_pubkey) = activate_sample_session(t0);
+    let t_allow = t0 + Duration::seconds(6);
+    state
+        .allow_session(
+            InputOrigin::LocalHost,
+            HostPermissionSelection::default(),
+            GrantDuration::OneHour,
+            t_allow,
+        )
+        .expect("allow screen-only");
+    assert!(state
+        .process_clipboard_sync(ClipboardEndpoint::Host, "secret-clip", t_allow)
+        .is_err());
+
+    state
+        .update_permissions(
+            InputOrigin::LocalHost,
+            HostPermissionSelection {
+                view_screen: true,
+                mouse_keyboard: false,
+                clipboard_sync: true,
+                file_transfer: false,
+            },
+            t_allow + Duration::seconds(1),
+        )
+        .expect("enable clipboard");
+    assert!(state
+        .set_clipboard_direction(
+            InputOrigin::RemoteOrSynthetic,
+            ClipboardDirection::Bidirectional,
+            t_allow + Duration::seconds(2),
+        )
+        .is_err());
+    state
+        .set_clipboard_direction(
+            InputOrigin::LocalHost,
+            ClipboardDirection::HostToViewer,
+            t_allow + Duration::seconds(2),
+        )
+        .expect("local host sets HostToViewer");
+
+    assert!(state
+        .process_clipboard_sync(
+            ClipboardEndpoint::Viewer,
+            "blocked viewer->host",
+            t_allow + Duration::seconds(2)
+        )
+        .is_err());
+    assert!(state
+        .process_clipboard_sync(
+            ClipboardEndpoint::Host,
+            "super-secret-host-clipboard",
+            t_allow + Duration::seconds(2)
+        )
+        .is_ok());
+
+    assert!(verify_chain(state.audit_chain().entries(), &host_pubkey).is_ok());
+    let audit_json = serde_json::to_string(state.audit_chain().entries()).expect("json");
+    assert!(!audit_json.contains("super-secret-host-clipboard"));
+    assert!(state
+        .audit_chain()
+        .entries()
+        .iter()
+        .any(|e| matches!(e.event.kind, AuditEventKind::ClipboardSyncEvent)));
+}
+
+#[test]
+fn host_opt_in_file_transfer_enforces_limits_and_logs_metadata_only() {
+    let t0 = Utc::now();
+    let host_keys = IdentityKeyPair::generate();
+    let host_pubkey = host_keys.public_key();
+    let policy_allowing_ft = PolicyLayer {
+        allow_file_transfer: Some(true),
+        max_file_size_bytes: Some(1024),
+        ..PolicyLayer::default()
+    };
+    let mut state = HostDesktopState::new(
+        host_keys,
+        &policy_allowing_ft,
+        &PolicyLayer::default(),
+        &PolicyLayer::default(),
+    );
+    state
+        .receive_incoming_request(&sample_request(false, true), t0)
+        .expect("incoming request");
+
+    let t_allow = t0 + Duration::seconds(1);
+    state
+        .allow_session(
+            InputOrigin::LocalHost,
+            HostPermissionSelection::default(),
+            GrantDuration::OneHour,
+            t_allow,
+        )
+        .expect("allow screen-only");
+    assert!(state
+        .start_file_transfer("tx-blocked", "notes.txt", 16, t_allow)
+        .is_err());
+
+    state
+        .update_permissions(
+            InputOrigin::LocalHost,
+            HostPermissionSelection {
+                view_screen: true,
+                mouse_keyboard: false,
+                clipboard_sync: false,
+                file_transfer: true,
+            },
+            t_allow + Duration::seconds(1),
+        )
+        .expect("enable file transfer");
+
+    assert!(state
+        .start_file_transfer("tx-big", "large.txt", 2048, t_allow + Duration::seconds(3))
+        .is_err());
+    assert!(state
+        .start_file_transfer("tx-exe", "evil.exe", 64, t_allow + Duration::seconds(3))
+        .is_err());
+
+    let payload = b"confidential-file-payload-never-logged";
+    state
+        .start_file_transfer(
+            "tx-good",
+            "invoice.pdf",
+            payload.len() as u64,
+            t_allow + Duration::seconds(4),
+        )
+        .expect("start tx-good");
+    for pkt in chunk_file_bytes("tx-good", payload, 16).expect("chunks") {
+        state
+            .push_file_chunk(
+                "tx-good",
+                pkt.seq,
+                &pkt.data,
+                t_allow + Duration::seconds(4),
+            )
+            .expect("push chunk");
+    }
+    let completed = state
+        .complete_file_transfer("tx-good", t_allow + Duration::seconds(5))
+        .expect("complete");
+    assert_eq!(completed.filename, "invoice.pdf");
+
+    assert!(verify_chain(state.audit_chain().entries(), &host_pubkey).is_ok());
+    let audit_json = serde_json::to_string(state.audit_chain().entries()).expect("json");
+    assert!(!audit_json.contains("confidential-file-payload-never-logged"));
+    assert!(audit_json.contains("invoice.pdf"));
+    assert!(state.audit_chain().entries().iter().any(|e| matches!(
+        e.event.kind,
+        AuditEventKind::FileTransferMetadata { ref filename, size_bytes }
+        if filename == "invoice.pdf" && size_bytes == payload.len() as u64
+    )));
 }

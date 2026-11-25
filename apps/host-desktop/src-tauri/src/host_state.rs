@@ -9,12 +9,13 @@
 
 use chrono::{DateTime, Duration, Utc};
 use oud_capture::{
-    CaptureError, HostFrameGatekeeper, HostInboundMessage, ProtectedSurfaceKind,
-    ProtectedSurfaceRegistry, Rect,
+    CaptureError, ClipboardAuditMetadata, ClipboardEndpoint, ClipboardSyncManager,
+    CompletedFileTransfer, FileTransferLimits, FileTransferManager, FileTransferProgress,
+    HostFrameGatekeeper, HostInboundMessage, ProtectedSurfaceKind, ProtectedSurfaceRegistry, Rect,
 };
 use oud_policy::{merge_policies, EffectivePolicy, PolicyLayer};
 use oud_protocol::audit::{AuditChain, AuditEvent, AuditEventKind};
-use oud_protocol::grant::{GrantDuration, GrantPermissions, SessionGrant};
+use oud_protocol::grant::{ClipboardDirection, GrantDuration, GrantPermissions, SessionGrant};
 use oud_protocol::handshake::{InitiatorPending, ResponderPending};
 use oud_protocol::identity::{IdentityKeyPair, IdentityPublicKey};
 use oud_protocol::state_machine::{
@@ -282,6 +283,8 @@ pub struct HostDesktopState {
     consent_machine: ConsentMachine,
     gatekeeper: Option<HostFrameGatekeeper>,
     protected_surfaces: ProtectedSurfaceRegistry,
+    clipboard_manager: ClipboardSyncManager,
+    file_transfer_manager: FileTransferManager,
     audit_chain: AuditChain,
     pending: Option<PendingSessionInternal>,
     active: Option<ActiveSessionInternal>,
@@ -299,12 +302,21 @@ impl HostDesktopState {
         owner: &PolicyLayer,
     ) -> Self {
         let effective_policy = merge_policies(org, group, owner);
+        let ft_limits = FileTransferLimits {
+            max_file_size_bytes: effective_policy.rules.max_file_size_bytes,
+            ..FileTransferLimits::default()
+        };
         Self {
             host_keys,
             effective_policy,
             consent_machine: ConsentMachine::new(),
             gatekeeper: None,
             protected_surfaces: ProtectedSurfaceRegistry::new(),
+            clipboard_manager: ClipboardSyncManager::default(),
+            file_transfer_manager: FileTransferManager::new(
+                ft_limits,
+                std::sync::Arc::new(oud_capture::NoopFileScanHook),
+            ),
             audit_chain: AuditChain::new(),
             pending: None,
             active: None,
@@ -764,11 +776,14 @@ impl HostDesktopState {
         Ok(self.snapshot(now))
     }
 
-    /// Evaluates an inbound WebRTC/remote message against `HostFrameGatekeeper` and
-    /// `ProtectedSurfaceRegistry`, logging any protected-rect rejections to `AuditChain`.
+    /// Evaluates an inbound WebRTC/remote message against `HostFrameGatekeeper`,
+    /// `ProtectedSurfaceRegistry`, directional clipboard, and chunked file transfer limits,
+    /// logging metadata-only audit entries (`ClipboardSyncEvent` / `FileTransferMetadata` /
+    /// `SyntheticInputBlocked`).
     ///
     /// # Errors
-    /// Returns [`CaptureError::FrameBlockedByGrant`] or [`CaptureError::ProtectedSurfaceInputBlocked`].
+    /// Returns [`CaptureError::FrameBlockedByGrant`], [`CaptureError::ProtectedSurfaceInputBlocked`],
+    /// [`CaptureError::ClipboardSyncBlocked`], or [`CaptureError::FileTransferRejected`].
     pub fn enforce_inbound_message(
         &mut self,
         msg: &HostInboundMessage,
@@ -781,14 +796,214 @@ impl HostDesktopState {
                 frame_kind: "ungranted",
             })?;
         gk.authorize_frame(msg.frame_kind(), now)?;
-        if let HostInboundMessage::PointerAction { x, y, .. } = *msg {
-            if let Err(err) = self.protected_surfaces.enforce_remote_pointer(x, y, now) {
-                gk.record_rejected_payload();
-                self.flush_pending_synthetic_audit();
-                return Err(err);
+
+        match msg {
+            HostInboundMessage::PointerAction { x, y, .. } => {
+                if let Err(err) = self.protected_surfaces.enforce_remote_pointer(*x, *y, now) {
+                    gk.record_rejected_payload();
+                    self.flush_pending_synthetic_audit();
+                    return Err(err);
+                }
+                Ok(())
             }
+            HostInboundMessage::ClipboardText { text } => {
+                if let Err(err) = self.process_clipboard_sync(ClipboardEndpoint::Viewer, text, now)
+                {
+                    if let Some(gk) = &mut self.gatekeeper {
+                        gk.record_rejected_payload();
+                    }
+                    return Err(err);
+                }
+                Ok(())
+            }
+            HostInboundMessage::FileTransferStart { .. }
+            | HostInboundMessage::FileTransferData { .. }
+            | HostInboundMessage::FileTransferComplete { .. }
+            | HostInboundMessage::FileTransferCancel { .. } => {
+                self.enforce_inbound_file_transfer(msg, now)
+            }
+            HostInboundMessage::MouseKeyboardInput { .. }
+            | HostInboundMessage::FileChunk { .. }
+            | HostInboundMessage::BlankScreenRequest => Ok(()),
+        }
+    }
+
+    fn enforce_inbound_file_transfer(
+        &mut self,
+        msg: &HostInboundMessage,
+        now: DateTime<Utc>,
+    ) -> Result<(), CaptureError> {
+        let res = match msg {
+            HostInboundMessage::FileTransferStart {
+                transfer_id,
+                filename,
+                total_bytes,
+            } => self
+                .start_file_transfer(transfer_id, filename, *total_bytes, now)
+                .map(|_| ()),
+            HostInboundMessage::FileTransferData {
+                transfer_id,
+                seq,
+                data,
+            } => self
+                .push_file_chunk(transfer_id, *seq, data, now)
+                .map(|_| ()),
+            HostInboundMessage::FileTransferComplete { transfer_id } => {
+                self.complete_file_transfer(transfer_id, now).map(|_| ())
+            }
+            HostInboundMessage::FileTransferCancel {
+                transfer_id,
+                reason,
+            } => {
+                let _ = self.cancel_file_transfer(transfer_id, reason);
+                Ok(())
+            }
+            _ => Ok(()),
+        };
+        if let Err(err) = res {
+            if let Some(gk) = &mut self.gatekeeper {
+                gk.record_rejected_payload();
+            }
+            return Err(err);
         }
         Ok(())
+    }
+
+    /// Sets clipboard sync direction from genuine local host input only.
+    ///
+    /// # Errors
+    /// Fails closed if `origin != InputOrigin::LocalHost`.
+    pub fn set_clipboard_direction(
+        &mut self,
+        origin: InputOrigin,
+        direction: ClipboardDirection,
+        now: DateTime<Utc>,
+    ) -> Result<HostSnapshot, CaptureError> {
+        if origin != InputOrigin::LocalHost {
+            self.protected_surfaces.record_block(
+                ProtectedSurfaceKind::SessionBanner,
+                "remote_clipboard_direction_change",
+                now,
+            );
+            self.flush_pending_synthetic_audit();
+            return Err(CaptureError::ProtectedSurfaceInputBlocked {
+                surface: ProtectedSurfaceKind::SessionBanner.as_str(),
+                reason: "remote_clipboard_direction_change",
+            });
+        }
+        self.clipboard_manager.set_direction(direction);
+        Ok(self.snapshot(now))
+    }
+
+    /// Authorizes a clipboard text sync operation and records metadata-only audit entry.
+    ///
+    /// # Errors
+    /// Fails closed if `clipboard_sync` is unchecked in `SessionGrant` or direction blocks `sender`.
+    pub fn process_clipboard_sync(
+        &mut self,
+        sender: ClipboardEndpoint,
+        text: &str,
+        now: DateTime<Utc>,
+    ) -> Result<ClipboardAuditMetadata, CaptureError> {
+        let gk = self
+            .gatekeeper
+            .as_mut()
+            .ok_or(CaptureError::FrameBlockedByGrant {
+                frame_kind: "clipboard_sync",
+            })?;
+        let meta = self
+            .clipboard_manager
+            .authorize_text_sync(gk, sender, text, now)?;
+        if let Some(active) = &self.active {
+            let (sid, viewer, domain) = (
+                active.session_id,
+                active.viewer_pubkey,
+                active.server_domain.clone(),
+            );
+            let _ = self.append_audit(sid, viewer, &domain, meta.to_audit_kind(), now);
+        }
+        Ok(meta)
+    }
+
+    /// Starts a chunked file transfer through `HostFrameGatekeeper` and monotonic size/type limits.
+    ///
+    /// # Errors
+    /// Fails closed if `file_transfer` is unchecked in `SessionGrant` or file violates limits.
+    pub fn start_file_transfer(
+        &mut self,
+        transfer_id: impl Into<String>,
+        filename: &str,
+        total_bytes: u64,
+        now: DateTime<Utc>,
+    ) -> Result<FileTransferProgress, CaptureError> {
+        let gk = self
+            .gatekeeper
+            .as_mut()
+            .ok_or(CaptureError::FrameBlockedByGrant {
+                frame_kind: "file_transfer",
+            })?;
+        self.file_transfer_manager
+            .start_transfer(gk, transfer_id, filename, total_bytes, now)
+    }
+
+    /// Appends a file chunk through `HostFrameGatekeeper`.
+    ///
+    /// # Errors
+    /// Fails closed if `file_transfer` is unchecked/revoked or chunk checks fail.
+    pub fn push_file_chunk(
+        &mut self,
+        transfer_id: &str,
+        seq: u32,
+        data: &[u8],
+        now: DateTime<Utc>,
+    ) -> Result<FileTransferProgress, CaptureError> {
+        let gk = self
+            .gatekeeper
+            .as_mut()
+            .ok_or(CaptureError::FrameBlockedByGrant {
+                frame_kind: "file_transfer",
+            })?;
+        self.file_transfer_manager
+            .push_chunk(gk, transfer_id, seq, data, now)
+    }
+
+    /// Finalizes a file transfer and records metadata-only `FileTransferMetadata` in `AuditChain`.
+    ///
+    /// # Errors
+    /// Fails closed if incomplete, rejected by scan hook, or `file_transfer` was disabled.
+    pub fn complete_file_transfer(
+        &mut self,
+        transfer_id: &str,
+        now: DateTime<Utc>,
+    ) -> Result<CompletedFileTransfer, CaptureError> {
+        let gk = self
+            .gatekeeper
+            .as_mut()
+            .ok_or(CaptureError::FrameBlockedByGrant {
+                frame_kind: "file_transfer",
+            })?;
+        let completed = self
+            .file_transfer_manager
+            .finish_transfer(gk, transfer_id, now)?;
+        if let Some(active) = &self.active {
+            let (sid, viewer, domain) = (
+                active.session_id,
+                active.viewer_pubkey,
+                active.server_domain.clone(),
+            );
+            let _ = self.append_audit(sid, viewer, &domain, completed.audit_metadata.clone(), now);
+        }
+        Ok(completed)
+    }
+
+    /// Cancels an active file transfer and drops partial buffered data.
+    pub fn cancel_file_transfer(
+        &mut self,
+        transfer_id: &str,
+        reason: impl Into<String>,
+    ) -> Option<FileTransferProgress> {
+        self.file_transfer_manager
+            .cancel_transfer(transfer_id, reason)
     }
 
     /// Registers or updates the live bounding [`Rect`] (and optional Win32 `HWND`) for a

@@ -8,7 +8,7 @@ use std::time::{Duration as StdDuration, Instant, SystemTime};
 
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
-use oud_protocol::grant::FrameKind;
+use oud_protocol::grant::{ClipboardDirection, FrameKind};
 use oud_protocol::identity::{IdentityKeyPair, IdentityPublicKey, IdentitySignature};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, Mutex};
@@ -39,6 +39,9 @@ use crate::gatekeeper::HostFrameGatekeeper;
 use crate::ice_config::{IceConfig, TransportMode};
 use crate::input_isolation::ProtectedSurfaceRegistry;
 use crate::preset::QualityPreset;
+use crate::transfer::{
+    ClipboardEndpoint, ClipboardSyncManager, CompletedFileTransfer, FileTransferManager,
+};
 
 const DTLS_BINDING_DOMAIN: &[u8] = b"oudos-dtls-fp-v1";
 const SHA256_FINGERPRINT_ALGORITHM: &str = "sha-256";
@@ -210,12 +213,42 @@ pub enum HostInboundMessage {
         /// UTF-8 clipboard payload.
         text: String,
     },
-    /// File transfer chunk metadata + payload.
+    /// Legacy file transfer chunk size notification.
     FileChunk {
         /// Transfer UUID string.
         transfer_id: String,
         /// Byte payload.
         bytes_len: usize,
+    },
+    /// Initiates a chunked opt-in file transfer.
+    FileTransferStart {
+        /// Transfer UUID string.
+        transfer_id: String,
+        /// Bare sanitized filename.
+        filename: String,
+        /// Declared byte size.
+        total_bytes: u64,
+    },
+    /// Sequential chunk payload for an active file transfer.
+    FileTransferData {
+        /// Transfer UUID string.
+        transfer_id: String,
+        /// Zero-based sequential chunk index.
+        seq: u32,
+        /// Raw chunk bytes.
+        data: Vec<u8>,
+    },
+    /// Finalizes a chunked file transfer and invokes the optional scan hook.
+    FileTransferComplete {
+        /// Transfer UUID string.
+        transfer_id: String,
+    },
+    /// Cancels an in-flight chunked file transfer mid-stream.
+    FileTransferCancel {
+        /// Transfer UUID string.
+        transfer_id: String,
+        /// Plain-language cancel reason.
+        reason: String,
     },
     /// Screen blanking request (always rejected in `v0.1` Asks-First mode).
     BlankScreenRequest,
@@ -230,20 +263,27 @@ impl HostInboundMessage {
                 FrameKind::MouseKeyboard
             }
             Self::ClipboardText { .. } => FrameKind::ClipboardSync,
-            Self::FileChunk { .. } => FrameKind::FileTransfer,
+            Self::FileChunk { .. }
+            | Self::FileTransferStart { .. }
+            | Self::FileTransferData { .. }
+            | Self::FileTransferComplete { .. }
+            | Self::FileTransferCancel { .. } => FrameKind::FileTransfer,
             Self::BlankScreenRequest => FrameKind::BlankScreen,
         }
     }
 }
 
 /// Host WebRTC peer holding the H.264 video track, pinned DTLS cert, `oud-input` data channel,
-/// protected consent/banner surface registry, and `HostFrameGatekeeper`.
+/// protected consent/banner surface registry, clipboard/file transfer managers, and `HostFrameGatekeeper`.
 pub struct HostMediaPeer {
     peer: Arc<RTCPeerConnection>,
     video_track: Arc<TrackLocalStaticSample>,
     input_channel: Arc<RTCDataChannel>,
     gatekeeper: Arc<Mutex<HostFrameGatekeeper>>,
     protected_surfaces: ProtectedSurfaceRegistry,
+    clipboard_manager: Arc<Mutex<ClipboardSyncManager>>,
+    file_transfer_manager: Arc<Mutex<FileTransferManager>>,
+    completed_files: Arc<Mutex<Vec<CompletedFileTransfer>>>,
     pipeline: Arc<Mutex<AdaptiveH264Pipeline>>,
     transport_mode: TransportMode,
     local_fingerprint: String,
@@ -318,6 +358,9 @@ impl HostMediaPeer {
 
         let gatekeeper_arc = Arc::new(Mutex::new(gatekeeper));
         let protected_surfaces = ProtectedSurfaceRegistry::new();
+        let clipboard_manager = Arc::new(Mutex::new(ClipboardSyncManager::default()));
+        let file_transfer_manager = Arc::new(Mutex::new(FileTransferManager::default()));
+        let completed_files = Arc::new(Mutex::new(Vec::new()));
         let authorized_inputs = Arc::new(Mutex::new(Vec::new()));
         let unexpected_channels_rejected = Arc::new(AtomicU64::new(0));
         let ice_rx = wire_host_peer_callbacks(
@@ -325,6 +368,9 @@ impl HostMediaPeer {
             &input_channel,
             &gatekeeper_arc,
             &protected_surfaces,
+            &clipboard_manager,
+            &file_transfer_manager,
+            &completed_files,
             &authorized_inputs,
             &unexpected_channels_rejected,
         );
@@ -341,6 +387,9 @@ impl HostMediaPeer {
             input_channel,
             gatekeeper: gatekeeper_arc,
             protected_surfaces,
+            clipboard_manager,
+            file_transfer_manager,
+            completed_files,
             pipeline: Arc::new(Mutex::new(pipeline)),
             transport_mode,
             local_fingerprint,
@@ -509,17 +558,36 @@ impl HostMediaPeer {
         msg: HostInboundMessage,
         now: DateTime<Utc>,
     ) -> Result<HostInboundMessage, CaptureError> {
-        let mut gk = self.gatekeeper.lock().await;
-        gk.authorize_frame(msg.frame_kind(), now)?;
-        if let HostInboundMessage::PointerAction { x, y, .. } = &msg {
-            if let Err(err) = self.protected_surfaces.enforce_remote_pointer(*x, *y, now) {
-                gk.record_rejected_payload();
-                return Err(err);
-            }
-        }
-        drop(gk);
-        self.authorized_inputs.lock().await.push(msg.clone());
-        Ok(msg)
+        enforce_inbound_message_with_managers(
+            &self.gatekeeper,
+            &self.protected_surfaces,
+            &self.clipboard_manager,
+            &self.file_transfer_manager,
+            &self.completed_files,
+            &self.authorized_inputs,
+            msg,
+            now,
+        )
+        .await
+    }
+
+    /// Configures directional clipboard policy for this host peer.
+    pub async fn set_clipboard_direction(&self, direction: ClipboardDirection) {
+        self.clipboard_manager.lock().await.set_direction(direction);
+    }
+
+    /// Configures maximum file size cap (from monotonic policy) on the file transfer manager.
+    pub async fn set_max_file_size_bytes(&self, max_bytes: u64) {
+        self.file_transfer_manager
+            .lock()
+            .await
+            .set_max_file_size_bytes(max_bytes);
+    }
+
+    /// Drains completed, scan-verified file transfers received over WebRTC.
+    pub async fn drain_completed_files(&self) -> Vec<CompletedFileTransfer> {
+        let mut guard = self.completed_files.lock().await;
+        std::mem::take(&mut *guard)
     }
 
     /// Validates, parses, and enforces [`HostFrameGatekeeper`] + [`ProtectedSurfaceRegistry`] on
@@ -536,6 +604,9 @@ impl HostMediaPeer {
         dispatch_raw_input_bytes(
             &self.gatekeeper,
             &self.protected_surfaces,
+            &self.clipboard_manager,
+            &self.file_transfer_manager,
+            &self.completed_files,
             &self.authorized_inputs,
             data,
             now,
@@ -825,11 +896,15 @@ async fn close_unexpected_data_channel(dc: Arc<RTCDataChannel>) {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn wire_host_peer_callbacks(
     peer: &RTCPeerConnection,
     input_channel: &RTCDataChannel,
     gatekeeper: &Arc<Mutex<HostFrameGatekeeper>>,
     protected_surfaces: &ProtectedSurfaceRegistry,
+    clipboard_manager: &Arc<Mutex<ClipboardSyncManager>>,
+    file_transfer_manager: &Arc<Mutex<FileTransferManager>>,
+    completed_files: &Arc<Mutex<Vec<CompletedFileTransfer>>>,
     authorized_inputs: &Arc<Mutex<Vec<HostInboundMessage>>>,
     unexpected_channels_rejected: &Arc<AtomicU64>,
 ) -> mpsc::UnboundedReceiver<RTCIceCandidateInit> {
@@ -847,13 +922,29 @@ fn wire_host_peer_callbacks(
 
     let gk_cb = Arc::clone(gatekeeper);
     let ps_cb = protected_surfaces.clone();
+    let clip_cb = Arc::clone(clipboard_manager);
+    let ft_cb = Arc::clone(file_transfer_manager);
+    let done_cb = Arc::clone(completed_files);
     let auth_cb = Arc::clone(authorized_inputs);
     input_channel.on_message(Box::new(move |msg: DataChannelMessage| {
         let gk = Arc::clone(&gk_cb);
         let ps = ps_cb.clone();
+        let clip = Arc::clone(&clip_cb);
+        let ft = Arc::clone(&ft_cb);
+        let done = Arc::clone(&done_cb);
         let authorized = Arc::clone(&auth_cb);
         Box::pin(async move {
-            let _ = dispatch_raw_input_bytes(&gk, &ps, &authorized, &msg.data, Utc::now()).await;
+            let _ = dispatch_raw_input_bytes(
+                &gk,
+                &ps,
+                &clip,
+                &ft,
+                &done,
+                &authorized,
+                &msg.data,
+                Utc::now(),
+            )
+            .await;
         })
     }));
 
@@ -871,9 +962,13 @@ fn wire_host_peer_callbacks(
     ice_rx
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn dispatch_raw_input_bytes(
     gatekeeper: &Mutex<HostFrameGatekeeper>,
     protected_surfaces: &ProtectedSurfaceRegistry,
+    clipboard_manager: &Mutex<ClipboardSyncManager>,
+    file_transfer_manager: &Mutex<FileTransferManager>,
+    completed_files: &Mutex<Vec<CompletedFileTransfer>>,
     authorized_inputs: &Mutex<Vec<HostInboundMessage>>,
     data: &[u8],
     now: DateTime<Utc>,
@@ -885,16 +980,96 @@ async fn dispatch_raw_input_bytes(
         });
     };
 
+    enforce_inbound_message_with_managers(
+        gatekeeper,
+        protected_surfaces,
+        clipboard_manager,
+        file_transfer_manager,
+        completed_files,
+        authorized_inputs,
+        parsed,
+        now,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn enforce_inbound_message_with_managers(
+    gatekeeper: &Mutex<HostFrameGatekeeper>,
+    protected_surfaces: &ProtectedSurfaceRegistry,
+    clipboard_manager: &Mutex<ClipboardSyncManager>,
+    file_transfer_manager: &Mutex<FileTransferManager>,
+    completed_files: &Mutex<Vec<CompletedFileTransfer>>,
+    authorized_inputs: &Mutex<Vec<HostInboundMessage>>,
+    parsed: HostInboundMessage,
+    now: DateTime<Utc>,
+) -> Result<HostInboundMessage, CaptureError> {
     let mut gk = gatekeeper.lock().await;
     gk.authorize_frame(parsed.frame_kind(), now)?;
-    if let HostInboundMessage::PointerAction { x, y, .. } = &parsed {
-        if let Err(err) = protected_surfaces.enforce_remote_pointer(*x, *y, now) {
-            gk.record_rejected_payload();
-            return Err(err);
-        }
-    }
-    drop(gk);
 
+    match &parsed {
+        HostInboundMessage::PointerAction { x, y, .. } => {
+            if let Err(err) = protected_surfaces.enforce_remote_pointer(*x, *y, now) {
+                gk.record_rejected_payload();
+                return Err(err);
+            }
+        }
+        HostInboundMessage::ClipboardText { text } => {
+            let clip = clipboard_manager.lock().await;
+            if let Err(err) =
+                clip.authorize_text_sync(&mut gk, ClipboardEndpoint::Viewer, text, now)
+            {
+                gk.record_rejected_payload();
+                return Err(err);
+            }
+        }
+        HostInboundMessage::FileTransferStart {
+            transfer_id,
+            filename,
+            total_bytes,
+        } => {
+            let mut ft = file_transfer_manager.lock().await;
+            if let Err(err) = ft.start_transfer(&mut gk, transfer_id, filename, *total_bytes, now) {
+                gk.record_rejected_payload();
+                return Err(err);
+            }
+        }
+        HostInboundMessage::FileTransferData {
+            transfer_id,
+            seq,
+            data,
+        } => {
+            let mut ft = file_transfer_manager.lock().await;
+            if let Err(err) = ft.push_chunk(&mut gk, transfer_id, *seq, data, now) {
+                gk.record_rejected_payload();
+                return Err(err);
+            }
+        }
+        HostInboundMessage::FileTransferComplete { transfer_id } => {
+            let mut ft = file_transfer_manager.lock().await;
+            match ft.finish_transfer(&mut gk, transfer_id, now) {
+                Ok(completed) => {
+                    completed_files.lock().await.push(completed);
+                }
+                Err(err) => {
+                    gk.record_rejected_payload();
+                    return Err(err);
+                }
+            }
+        }
+        HostInboundMessage::FileTransferCancel {
+            transfer_id,
+            reason,
+        } => {
+            let mut ft = file_transfer_manager.lock().await;
+            let _ = ft.cancel_transfer(transfer_id, reason);
+        }
+        HostInboundMessage::MouseKeyboardInput { .. }
+        | HostInboundMessage::FileChunk { .. }
+        | HostInboundMessage::BlankScreenRequest => {}
+    }
+
+    drop(gk);
     authorized_inputs.lock().await.push(parsed.clone());
     Ok(parsed)
 }

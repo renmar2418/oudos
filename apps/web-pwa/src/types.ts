@@ -16,6 +16,21 @@ export type ScreenUnavailableReason =
 
 export type QualityPreset = "Auto" | "Sharp" | "Fast";
 
+export type ClipboardDirection =
+  | "disabled"
+  | "host_to_viewer"
+  | "viewer_to_host"
+  | "bidirectional";
+
+export interface FileTransferItem {
+  transferId: string;
+  filename: string;
+  sizeBytes: number;
+  transferredBytes: number;
+  status: "in_progress" | "completed" | "cancelled" | "rejected";
+  statusMessage?: string;
+}
+
 export type IdleTimeoutOption = "15m" | "30m" | "1h" | "never";
 
 export type PolicyScope = "organisation" | "group" | "device_owner" | "v0_1_lock";

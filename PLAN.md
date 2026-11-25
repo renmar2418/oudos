@@ -65,7 +65,7 @@ git init -b main
   - Enforce `LLMHF_INJECTED` synthetic-input rejection and remote pointer rect blocking over consent/banner windows.
   - **Exit Gate:** Automated input-injection test confirms remote input cannot click `Allow` or dismiss the banner, and unchecked input/file frames are dropped locally at the protocol gatekeeper.
 
-- [ ] **Issue `#9`: Clipboard Sync & Opt-In File Transfer**
+- [x] **Issue `#9`: Clipboard Sync & Opt-In File Transfer**
   - Implement directional text clipboard sync and chunked WebRTC data-channel file transfer (off by default, size/type limits, mid-transfer cancel, filename/size metadata logged).
   - **Exit Gate:** Tests verify frames fail closed whenever unchecked in `SessionGrant`.
 

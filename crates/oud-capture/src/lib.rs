@@ -9,6 +9,7 @@ pub mod ice_config;
 pub mod input_isolation;
 pub mod preset;
 pub mod telemetry;
+pub mod transfer;
 pub mod webrtc_peer;
 
 #[cfg(target_os = "windows")]
@@ -34,6 +35,13 @@ pub use input_isolation::{query_window_rect, WindowsInputGuard};
 pub use oud_protocol::PROTOCOL_VERSION;
 pub use preset::{EncodeProfile, QualityPreset};
 pub use telemetry::{SessionTelemetry, TelemetrySnapshot};
+pub use transfer::{
+    chunk_file_bytes, ClipboardAuditMetadata, ClipboardEndpoint, ClipboardSyncManager,
+    CompletedFileTransfer, FileChunkPacket, FileScanHook, FileScanVerdict, FileTransferLimits,
+    FileTransferManager, FileTransferProgress, FileTransferStatus, NoopFileScanHook,
+    DEFAULT_BLOCKED_EXTENSIONS, DEFAULT_TRANSFER_CHUNK_SIZE, MAX_CLIPBOARD_TEXT_BYTES,
+    MAX_CONCURRENT_TRANSFERS, MAX_TRANSFER_CHUNK_SIZE,
+};
 pub use webrtc_peer::{
     DeliveredVideoFrame, DtlsFingerprintBinding, HostInboundMessage, HostMediaPeer,
     ReceivedRtpFrame, SignedSdpDescription, VerifiedPeerContext, ViewerMediaPeer,

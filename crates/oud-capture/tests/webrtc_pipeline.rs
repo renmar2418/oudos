@@ -9,14 +9,16 @@ use std::time::{Duration, Instant};
 
 use chrono::{Duration as ChronoDuration, Utc};
 use oud_capture::{
-    discover_hardware_h264_adapters, AdaptiveH264Pipeline, CaptureError, EncodedVideoFrame,
-    EncoderKind, HostFrameGatekeeper, HostInboundMessage, HostMediaPeer, IceConfig,
-    ProtectedSurfaceKind, QualityPreset, RawFrame, Rect, ScreenCapturer, SessionTelemetry,
-    SignedSdpDescription, SoftwareH264Encoder, SyntheticFrameCapturer, TransportMode,
-    TurnFallbackConfig, VerifiedPeerContext, VideoEncoder, ViewerMediaPeer,
+    chunk_file_bytes, discover_hardware_h264_adapters, AdaptiveH264Pipeline, CaptureError,
+    EncodedVideoFrame, EncoderKind, HostFrameGatekeeper, HostInboundMessage, HostMediaPeer,
+    IceConfig, ProtectedSurfaceKind, QualityPreset, RawFrame, Rect, ScreenCapturer,
+    SessionTelemetry, SignedSdpDescription, SoftwareH264Encoder, SyntheticFrameCapturer,
+    TransportMode, TurnFallbackConfig, VerifiedPeerContext, VideoEncoder, ViewerMediaPeer,
 };
-use oud_protocol::audit::{verify_chain, AuditChain, AuditEventKind};
-use oud_protocol::grant::{FrameKind, GrantDuration, GrantPermissions, SessionGrant};
+use oud_protocol::audit::{verify_chain, AuditChain, AuditEvent, AuditEventKind};
+use oud_protocol::grant::{
+    ClipboardDirection, FrameKind, GrantDuration, GrantPermissions, SessionGrant,
+};
 use oud_protocol::handshake::{InitiatorPending, ResponderPending};
 use oud_protocol::identity::IdentityKeyPair;
 use tokio::time::{sleep, timeout};
@@ -923,4 +925,185 @@ async fn remote_pointer_cannot_click_consent_allow_or_dismiss_banner_over_webrtc
 
     host.close().await.expect("close host");
     viewer.close().await.expect("close viewer");
+}
+
+#[tokio::test]
+async fn webrtc_clipboard_and_chunked_file_transfer_fail_closed_unless_granted() {
+    let host_keys = IdentityKeyPair::generate();
+    let viewer_keys = IdentityKeyPair::generate();
+    let session_id = Uuid::now_v7();
+    let now = Utc::now();
+
+    let (host_ctx, viewer_ctx) =
+        perform_authenticated_handshake(&host_keys, &viewer_keys, session_id);
+    let grant = SessionGrant::issue(
+        &host_keys,
+        session_id,
+        viewer_keys.public_key(),
+        "support.example.org",
+        GrantPermissions::default(),
+        GrantDuration::OneHour,
+        now,
+    )
+    .expect("screen-only grant");
+
+    let gk = HostFrameGatekeeper::from_verified_grant(
+        grant.clone(),
+        host_keys.public_key(),
+        session_id,
+        viewer_keys.public_key(),
+        "support.example.org",
+        now,
+    )
+    .expect("gatekeeper");
+    let pipeline = AdaptiveH264Pipeline::new(QualityPreset::Auto).expect("pipeline");
+    let ice = IceConfig::local_loopback();
+
+    let host = Box::pin(HostMediaPeer::new(&ice, gk, pipeline, host_ctx))
+        .await
+        .expect("host");
+    let viewer = Box::pin(ViewerMediaPeer::new(&ice, viewer_ctx))
+        .await
+        .expect("viewer");
+    connect_loopback_peers(&host, &viewer, &host_keys, &viewer_keys).await;
+
+    // 1. Default screen-only grant drops clipboard and file transfer frames.
+    viewer
+        .send_input_message(&HostInboundMessage::ClipboardText {
+            text: "ungranted clipboard".to_owned(),
+        })
+        .await
+        .expect("send clipboard");
+    viewer
+        .send_input_message(&HostInboundMessage::FileTransferStart {
+            transfer_id: "tx-blocked".to_owned(),
+            filename: "notes.txt".to_owned(),
+            total_bytes: 12,
+        })
+        .await
+        .expect("send file start");
+
+    let drop_deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        if host.gatekeeper().lock().await.dropped_frames() >= 2 {
+            break;
+        }
+        assert!(Instant::now() < drop_deadline, "expected dropped frames");
+        sleep(Duration::from_millis(15)).await;
+    }
+    assert_eq!(
+        host.drain_authorized_inputs().await,
+        [] as [HostInboundMessage; 0]
+    );
+
+    verify_granted_clipboard_and_file_transfer(
+        &host,
+        &viewer,
+        &host_keys,
+        &viewer_keys,
+        session_id,
+        &grant,
+    )
+    .await;
+
+    host.close().await.expect("close host");
+    viewer.close().await.expect("close viewer");
+}
+
+async fn verify_granted_clipboard_and_file_transfer(
+    host: &HostMediaPeer,
+    viewer: &ViewerMediaPeer,
+    host_keys: &IdentityKeyPair,
+    viewer_keys: &IdentityKeyPair,
+    session_id: Uuid,
+    grant: &SessionGrant,
+) {
+    let updated_grant = grant
+        .reissue_with_permissions(
+            host_keys,
+            GrantPermissions {
+                view_screen: true,
+                mouse_keyboard: false,
+                clipboard_sync: true,
+                file_transfer: true,
+                blank_screen: false,
+            },
+            Utc::now(),
+        )
+        .expect("reissue");
+    host.gatekeeper()
+        .lock()
+        .await
+        .update_grant(updated_grant, Utc::now())
+        .expect("update grant");
+    host.set_clipboard_direction(ClipboardDirection::ViewerToHost)
+        .await;
+
+    viewer
+        .send_input_message(&HostInboundMessage::ClipboardText {
+            text: "authorized clipboard text".to_owned(),
+        })
+        .await
+        .expect("send authorized clipboard");
+
+    let file_bytes = b"Oudos chunked WebRTC payload verified!";
+    viewer
+        .send_input_message(&HostInboundMessage::FileTransferStart {
+            transfer_id: "tx-ok".to_owned(),
+            filename: "summary.txt".to_owned(),
+            total_bytes: file_bytes.len() as u64,
+        })
+        .await
+        .expect("send start");
+    for pkt in chunk_file_bytes("tx-ok", file_bytes, 16).expect("chunks") {
+        viewer
+            .send_input_message(&HostInboundMessage::FileTransferData {
+                transfer_id: pkt.transfer_id,
+                seq: pkt.seq,
+                data: pkt.data,
+            })
+            .await
+            .expect("send chunk");
+    }
+    viewer
+        .send_input_message(&HostInboundMessage::FileTransferComplete {
+            transfer_id: "tx-ok".to_owned(),
+        })
+        .await
+        .expect("send complete");
+
+    let done_deadline = Instant::now() + Duration::from_secs(3);
+    let completed = loop {
+        let files = host.drain_completed_files().await;
+        if !files.is_empty() {
+            break files;
+        }
+        assert!(
+            Instant::now() < done_deadline,
+            "completed file transfer did not arrive"
+        );
+        sleep(Duration::from_millis(15)).await;
+    };
+    assert_eq!(completed.len(), 1);
+    assert_eq!(completed[0].filename, "summary.txt");
+    assert_eq!(completed[0].payload, file_bytes);
+
+    let mut audit = AuditChain::new();
+    audit
+        .append(
+            AuditEvent {
+                event_id: Uuid::now_v7(),
+                timestamp_utc: Utc::now(),
+                session_id,
+                device_pubkey: host_keys.public_key(),
+                actor_pubkey: viewer_keys.public_key(),
+                server_domain: "support.example.org".to_owned(),
+                kind: completed[0].audit_metadata.clone(),
+            },
+            host_keys,
+        )
+        .expect("append file metadata");
+    let serialized = serde_json::to_string(audit.entries()).expect("json");
+    assert!(serialized.contains("summary.txt"));
+    assert!(!serialized.contains("Oudos chunked WebRTC payload verified!"));
 }

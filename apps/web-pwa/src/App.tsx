@@ -75,6 +75,7 @@ export interface AppProps {
   transport?: SessionTransport;
   initialDevices?: DeviceItem[];
   initialSessions?: SessionRecord[];
+  initialPolicy?: PolicyState;
 }
 
 export const App: React.FC<AppProps> = ({
@@ -82,6 +83,7 @@ export const App: React.FC<AppProps> = ({
   transport: injectedTransport,
   initialDevices = SAMPLE_DEVICES,
   initialSessions = INITIAL_SESSIONS,
+  initialPolicy = INITIAL_POLICY,
 }) => {
   const defaultTransport = useMemo(
     () => injectedTransport ?? createBrowserSessionTransport(),
@@ -93,7 +95,7 @@ export const App: React.FC<AppProps> = ({
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>(
     initialDevices[0]?.deviceId ?? ""
   );
-  const [policy, setPolicy] = useState<PolicyState>(INITIAL_POLICY);
+  const [policy, setPolicy] = useState<PolicyState>(initialPolicy);
   const [sessions, setSessions] = useState<SessionRecord[]>(initialSessions);
   const [auditEntries, setAuditEntries] =
     useState<AuditEntryItem[]>(SAMPLE_AUDIT_ENTRIES);
@@ -757,6 +759,26 @@ export const App: React.FC<AppProps> = ({
                         ? { ...s, hostOfflineMidSession: false }
                         : s
                     )
+                  );
+                }}
+                onClipboardSync={(direction, _byteLen) => {
+                  const dev =
+                    devices.find((d) => d.deviceId === activeSession.deviceId) ??
+                    selectedDevice;
+                  appendAuditEntry(
+                    dev,
+                    activeSession.sessionId,
+                    `ClipboardSyncEvent (${direction})`
+                  );
+                }}
+                onFileTransferComplete={(filename, sizeBytes) => {
+                  const dev =
+                    devices.find((d) => d.deviceId === activeSession.deviceId) ??
+                    selectedDevice;
+                  appendAuditEntry(
+                    dev,
+                    activeSession.sessionId,
+                    `FileTransferMetadata (${filename}, ${sizeBytes} B)`
                   );
                 }}
                 onEndSession={(reason = "You ended the session") => {

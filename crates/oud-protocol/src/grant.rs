@@ -79,6 +79,35 @@ pub enum FrameKind {
     BlankScreen,
 }
 
+/// Directional control for text-only clipboard synchronization.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ClipboardDirection {
+    /// Clipboard sync is off (default).
+    #[default]
+    Disabled,
+    /// Host clipboard text can flow to viewer only.
+    HostToViewer,
+    /// Viewer clipboard text can flow to host only.
+    ViewerToHost,
+    /// Text clipboard sync flows both ways while granted.
+    Bidirectional,
+}
+
+impl ClipboardDirection {
+    /// Returns `true` if host-originated text may flow to the viewer.
+    #[must_use]
+    pub const fn allows_host_to_viewer(self) -> bool {
+        matches!(self, Self::HostToViewer | Self::Bidirectional)
+    }
+
+    /// Returns `true` if viewer-originated text may flow to the host.
+    #[must_use]
+    pub const fn allows_viewer_to_host(self) -> bool {
+        matches!(self, Self::ViewerToHost | Self::Bidirectional)
+    }
+}
+
 /// Signed capability token issued exclusively by the host agent.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SessionGrant {

@@ -79,4 +79,12 @@ pub enum CaptureError {
     /// Remote WebRTC SDP `a=fingerprint` failed signed handshake binding verification.
     #[error("DTLS fingerprint verification failed: {0}")]
     DtlsFingerprintMismatch(String),
+
+    /// Directional or payload validation blocked a clipboard sync frame.
+    #[error("clipboard sync blocked: {0}")]
+    ClipboardSyncBlocked(String),
+
+    /// Opt-in file transfer failed size, type, sequence, cancellation, or scan checks.
+    #[error("file transfer rejected: {0}")]
+    FileTransferRejected(String),
 }
