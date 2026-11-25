@@ -515,10 +515,10 @@ impl ConsentMachine {
             ConsentState::GrantSignedActive(a) | ConsentState::GrantUpdatedImmediately(a) => {
                 if now >= a.grant.expires_at_utc {
                     self.state = ConsentState::RevokedLogged(RevocationReason::GrantExpired);
-                } else if let Some(idle_secs) = a.idle_timeout_secs {
-                    if now >= a.last_activity_at + Duration::seconds(idle_secs) {
-                        self.state = ConsentState::RevokedLogged(RevocationReason::IdleTimeout);
-                    }
+                } else if a.idle_timeout_secs.is_some_and(|idle_secs| {
+                    now >= a.last_activity_at + Duration::seconds(idle_secs)
+                }) {
+                    self.state = ConsentState::RevokedLogged(RevocationReason::IdleTimeout);
                 } else if matches!(self.state, ConsentState::GrantUpdatedImmediately(_)) {
                     self.state = ConsentState::GrantSignedActive(a.clone());
                 }

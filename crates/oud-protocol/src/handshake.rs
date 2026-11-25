@@ -192,6 +192,7 @@ impl InitiatorPending {
             &self.offer.viewer_ephemeral,
             &accept.host_ephemeral,
             &self.offer.sas_commitment,
+            &self.reveal.commit_nonce,
             &dh_secret,
         )?;
         dh_secret.zeroize();
@@ -287,6 +288,7 @@ impl ResponderPending {
             &self.offer.viewer_ephemeral,
             &self.host_ephemeral,
             &self.offer.sas_commitment,
+            &reveal.commit_nonce,
             &self.dh_secret,
         )
     }
@@ -367,6 +369,7 @@ fn finalize_outcome(
     viewer_ephemeral: &[u8; 32],
     host_ephemeral: &[u8; 32],
     sas_commitment: &[u8; 32],
+    commit_nonce: &[u8; 32],
     dh_secret: &[u8; 32],
 ) -> Result<HandshakeOutcome, ProtocolError> {
     let mut hasher = Sha256::new();
@@ -379,6 +382,7 @@ fn finalize_outcome(
     hasher.update(viewer_ephemeral);
     hasher.update(host_ephemeral);
     hasher.update(sas_commitment);
+    hasher.update(commit_nonce);
     hasher.update(dh_secret);
     let transcript_hash: [u8; 32] = hasher.finalize().into();
 
@@ -428,17 +432,50 @@ mod tests {
         let host = IdentityKeyPair::generate();
         let session_id = Uuid::now_v7();
 
-        let (_init_pending, offer) =
+        let (init_pending, offer) =
             InitiatorPending::initiate(session_id, "support.example.org", &viewer);
-        let (resp_pending, _accept) =
+        let (resp_pending, accept) =
             ResponderPending::respond(&offer, &host).expect("offer verifies");
-        let bad_reveal = SasReveal {
-            commit_nonce: [0xAB; 32],
-        };
+        let (mut reveal, _viewer_out) = init_pending
+            .complete(&accept, Some(&host.public_key()))
+            .expect("accept verifies");
+        reveal.commit_nonce[0] ^= 0x01;
 
         assert_eq!(
-            resp_pending.verify_reveal_and_finalize(&bad_reveal),
+            resp_pending.verify_reveal_and_finalize(&reveal),
             Err(ProtocolError::CommitmentMismatch)
         );
+    }
+
+    #[test]
+    fn transcript_binds_commit_nonce_against_pre_reveal_guessing() {
+        let viewer = IdentityKeyPair::generate();
+        let host = IdentityKeyPair::generate();
+        let session_id = Uuid::now_v7();
+
+        let (init_pending, offer) =
+            InitiatorPending::initiate(session_id, "support.example.org", &viewer);
+        let (_resp_pending, accept) =
+            ResponderPending::respond(&offer, &host).expect("offer verifies");
+        let (reveal, viewer_out) = init_pending
+            .complete(&accept, Some(&host.public_key()))
+            .expect("accept verifies");
+
+        let mut wrong_nonce = reveal.commit_nonce;
+        wrong_nonce[31] ^= 0xFF;
+        let forged_outcome = finalize_outcome(
+            session_id,
+            "support.example.org",
+            &viewer.public_key(),
+            &host.public_key(),
+            &offer.viewer_ephemeral,
+            &accept.host_ephemeral,
+            &offer.sas_commitment,
+            &wrong_nonce,
+            &[0x42; 32],
+        )
+        .expect("outcome derives");
+
+        assert_ne!(forged_outcome.transcript_hash, viewer_out.transcript_hash);
     }
 }

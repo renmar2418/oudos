@@ -140,6 +140,7 @@ impl SessionGrant {
         }
 
         let grant_id = Uuid::now_v7();
+        let issued_at_utc = truncate_to_seconds(issued_at_utc);
         let expires_at_utc = issued_at_utc + duration.max_duration();
         let device_pubkey = host_keys.public_key();
         let payload = canonical_grant_bytes(
@@ -187,6 +188,7 @@ impl SessionGrant {
             return Err(ProtocolError::GrantExpired);
         }
 
+        let issued_at_utc = truncate_to_seconds(now);
         let grant_id = Uuid::now_v7();
         let payload = canonical_grant_bytes(
             grant_id,
@@ -196,7 +198,7 @@ impl SessionGrant {
             &self.server_domain,
             new_permissions,
             self.duration,
-            now,
+            issued_at_utc,
             self.expires_at_utc,
         )?;
         let host_signature = host_keys.sign(&payload);
@@ -209,7 +211,7 @@ impl SessionGrant {
             server_domain: self.server_domain.clone(),
             permissions: new_permissions,
             duration: self.duration,
-            issued_at_utc: now,
+            issued_at_utc,
             expires_at_utc: self.expires_at_utc,
             host_signature,
         })
@@ -237,6 +239,11 @@ impl SessionGrant {
             return Err(ProtocolError::GrantBindingMismatch);
         }
         validate_v01_permissions(self.permissions)?;
+        if self.issued_at_utc.timestamp_subsec_nanos() != 0
+            || self.expires_at_utc.timestamp_subsec_nanos() != 0
+        {
+            return Err(ProtocolError::GrantBindingMismatch);
+        }
         if self.expires_at_utc <= self.issued_at_utc {
             return Err(ProtocolError::GrantExpired);
         }
@@ -277,6 +284,10 @@ impl SessionGrant {
             FrameKind::BlankScreen => false,
         }
     }
+}
+
+fn truncate_to_seconds(dt: DateTime<Utc>) -> DateTime<Utc> {
+    DateTime::from_timestamp(dt.timestamp(), 0).unwrap_or(dt)
 }
 
 fn validate_v01_permissions(permissions: GrantPermissions) -> Result<(), ProtocolError> {
@@ -385,6 +396,90 @@ mod tests {
                 now
             ),
             Err(ProtocolError::HostKeyChanged)
+        );
+    }
+
+    #[test]
+    fn tampered_grant_fields_fail_signature_verification() {
+        let host = IdentityKeyPair::generate();
+        let viewer = IdentityKeyPair::generate().public_key();
+        let attacker = IdentityKeyPair::generate().public_key();
+        let session_id = Uuid::now_v7();
+        let now = Utc::now();
+
+        let valid = SessionGrant::issue(
+            &host,
+            session_id,
+            viewer,
+            "support.example.org",
+            GrantPermissions::default(),
+            GrantDuration::OneHour,
+            now,
+        )
+        .expect("grant issued");
+
+        assert_eq!(valid.issued_at_utc.timestamp_subsec_nanos(), 0);
+        assert_eq!(valid.expires_at_utc.timestamp_subsec_nanos(), 0);
+        assert!(valid
+            .verify(
+                &host.public_key(),
+                session_id,
+                &viewer,
+                "support.example.org",
+                now
+            )
+            .is_ok());
+
+        // 1. Tamper permissions (escalate mouse_keyboard)
+        let mut tampered_perms = valid.clone();
+        tampered_perms.permissions.mouse_keyboard = true;
+        assert_eq!(
+            tampered_perms.verify(
+                &host.public_key(),
+                session_id,
+                &viewer,
+                "support.example.org",
+                now
+            ),
+            Err(ProtocolError::SignatureVerificationFailed)
+        );
+
+        // 2. Tamper expires_at_utc within duration cap
+        let mut tampered_expiry = valid.clone();
+        tampered_expiry.expires_at_utc -= Duration::seconds(10);
+        assert_eq!(
+            tampered_expiry.verify(
+                &host.public_key(),
+                session_id,
+                &viewer,
+                "support.example.org",
+                now
+            ),
+            Err(ProtocolError::SignatureVerificationFailed)
+        );
+
+        // 3. Tamper viewer_pubkey (binding check and signature check)
+        let mut tampered_viewer = valid;
+        tampered_viewer.viewer_pubkey = attacker;
+        assert_eq!(
+            tampered_viewer.verify(
+                &host.public_key(),
+                session_id,
+                &viewer,
+                "support.example.org",
+                now
+            ),
+            Err(ProtocolError::GrantBindingMismatch)
+        );
+        assert_eq!(
+            tampered_viewer.verify(
+                &host.public_key(),
+                session_id,
+                &attacker,
+                "support.example.org",
+                now
+            ),
+            Err(ProtocolError::SignatureVerificationFailed)
         );
     }
 }

@@ -710,6 +710,10 @@ fn negative_revoke_and_mid_session_toggle_and_control_plane_offline() {
             now,
         })
         .expect("updated");
+    assert!(matches!(
+        machine.state(),
+        ConsentState::GrantUpdatedImmediately(_)
+    ));
     assert!(!machine.can_forward_frame(FrameKind::MouseKeyboard, now));
     assert!(machine.can_forward_frame(FrameKind::ScreenView, now));
 
@@ -724,4 +728,78 @@ fn negative_revoke_and_mid_session_toggle_and_control_plane_offline() {
         ConsentState::RevokedLogged(RevocationReason::HostEnded)
     ));
     assert!(!machine.can_forward_frame(FrameKind::ScreenView, now));
+}
+
+#[test]
+fn grant_updated_immediately_settles_with_idle_timeout_and_revokes_on_idle() {
+    let host = IdentityKeyPair::generate();
+    let viewer = IdentityKeyPair::generate();
+    let now = Utc::now();
+    let mut machine = ConsentMachine::new();
+    let sid = Uuid::now_v7();
+
+    let sas = setup_consented_context(&mut machine, &host, &viewer, sid, false, now);
+    machine
+        .apply(ConsentEvent::SasCheck {
+            reported_sas: sas,
+            now,
+        })
+        .expect("sas verified");
+
+    let grant = SessionGrant::issue(
+        &host,
+        sid,
+        viewer.public_key(),
+        "support.example.org",
+        GrantPermissions {
+            view_screen: true,
+            mouse_keyboard: true,
+            ..GrantPermissions::default()
+        },
+        GrantDuration::OneHour,
+        now,
+    )
+    .expect("grant issued");
+    machine
+        .apply(ConsentEvent::HostAllow {
+            grant: grant.clone(),
+            host_pubkey: host.public_key(),
+            idle_timeout_secs: Some(900),
+            now,
+        })
+        .expect("active");
+
+    let tightened = grant
+        .reissue_with_permissions(&host, GrantPermissions::default(), now)
+        .expect("reissued");
+    machine
+        .apply(ConsentEvent::HostUpdatePermissions {
+            updated_grant: tightened,
+            now,
+        })
+        .expect("updated");
+    assert!(matches!(
+        machine.state(),
+        ConsentState::GrantUpdatedImmediately(_)
+    ));
+
+    let before_idle = now + Duration::seconds(10);
+    machine
+        .apply(ConsentEvent::Tick { now: before_idle })
+        .expect("settles while active");
+    assert!(matches!(
+        machine.state(),
+        ConsentState::GrantSignedActive(_)
+    ));
+    assert!(machine.can_forward_frame(FrameKind::ScreenView, before_idle));
+
+    let at_idle = now + Duration::seconds(900);
+    machine
+        .apply(ConsentEvent::Tick { now: at_idle })
+        .expect("idle timeout revokes");
+    assert!(matches!(
+        machine.state(),
+        ConsentState::RevokedLogged(RevocationReason::IdleTimeout)
+    ));
+    assert!(!machine.can_forward_frame(FrameKind::ScreenView, at_idle));
 }

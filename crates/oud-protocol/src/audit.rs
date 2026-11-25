@@ -282,4 +282,59 @@ mod tests {
             Err(ProtocolError::AuditChainBroken { index: 0, .. })
         ));
     }
+
+    #[test]
+    fn hash_chain_detects_single_byte_tamper_in_middle_entry() {
+        let host = IdentityKeyPair::generate();
+        let viewer = IdentityKeyPair::generate().public_key();
+        let session_id = Uuid::now_v7();
+        let mut chain = AuditChain::new();
+
+        for kind in [
+            AuditEventKind::SessionRequested,
+            AuditEventKind::FileTransferMetadata {
+                filename: "report.pdf".to_owned(),
+                size_bytes: 1024,
+            },
+            AuditEventKind::SessionRevoked {
+                reason: RevocationReason::HostEnded,
+                duration_secs: 42,
+            },
+        ] {
+            chain
+                .append(
+                    AuditEvent {
+                        event_id: Uuid::now_v7(),
+                        timestamp_utc: Utc::now(),
+                        session_id,
+                        device_pubkey: host.public_key(),
+                        actor_pubkey: viewer,
+                        server_domain: "support.example.org".to_owned(),
+                        kind,
+                    },
+                    &host,
+                )
+                .expect("append entry");
+        }
+        assert!(chain.verify(&host.public_key()).is_ok());
+
+        // Flip 1 byte in middle entry #1's entry_hash
+        let mut tampered_hash = chain.entries().to_vec();
+        tampered_hash[1].entry_hash[15] ^= 0x01;
+        assert!(matches!(
+            verify_chain(&tampered_hash, &host.public_key()),
+            Err(ProtocolError::AuditChainBroken { index: 1, .. })
+        ));
+
+        // Flip 1 byte in middle entry #1's metadata payload (size_bytes 1024 -> 1025)
+        let mut tampered_payload = chain.entries().to_vec();
+        tampered_payload[1].event.kind = AuditEventKind::FileTransferMetadata {
+            filename: "report.pdf".to_owned(),
+            size_bytes: 1025,
+        };
+        assert!(matches!(
+            verify_chain(&tampered_payload, &host.public_key()),
+            Err(ProtocolError::AuditChainBroken { index: 1, .. })
+        ));
+    }
 }
