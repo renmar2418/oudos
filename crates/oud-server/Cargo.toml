@@ -1,0 +1,14 @@
+[package]
+name = "oud-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Self-hostable Oudos control plane, WebSocket signaling broker, and audit API."
+
+[dependencies]
+oud-policy = { path = "../oud-policy" }
+oud-protocol = { path = "../oud-protocol" }
+
+[lints]
+workspace = true

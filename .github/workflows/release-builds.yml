@@ -1,0 +1,89 @@
+name: Release — Cross-Platform Oudos Builds
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-host-desktop:
+    name: Build Host Desktop (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # v0.1 Primary Host Target ($0 via GitHub Actions + SignPath Foundation after v0.1.0)
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+          # Uncomment in v0.2 (Issue #14 — Linux X11/Wayland Host):
+          # - platform: ubuntu-24.04
+          #   target: x86_64-unknown-linux-gnu
+          # Uncomment in v0.3 (Issue #18 — macOS Host once Apple Developer notarisation is funded):
+          # - platform: macos-latest
+          #   target: aarch64-apple-darwin
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable pnpm via Corepack
+        run: corepack enable
+
+      - name: Install Rust stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Linux Tauri v2 dependencies (v0.2+)
+        if: startsWith(matrix.platform, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libpipewire-0.3-dev
+
+      - name: Build Tauri v2 Host Installer
+        if: hashFiles('apps/host-desktop/src-tauri/tauri.conf.json') != ''
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: apps/host-desktop
+          tagName: ${{ github.ref_name }}
+          releaseName: "Oudos ${{ github.ref_name }}"
+          releaseBody: "Consent-first, AGPL-3.0 remote desktop release. Verify SHA-256 checksums before installing."
+          releaseDraft: true
+          prerelease: true
+
+      - name: Generate SHA-256 Checksum Manifest (Windows)
+        if: startsWith(matrix.platform, 'windows') && hashFiles('apps/host-desktop/src-tauri/target/**/bundle/**/*') != ''
+        shell: pwsh
+        run: |
+          Get-ChildItem -Recurse apps/host-desktop/src-tauri/target/*/release/bundle/*/* -File |
+            Get-FileHash -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash.ToLower())  $($_.Path | Split-Path -Leaf)" } |
+            Out-File -Encoding ascii SHA256SUMS-windows.txt
+
+      - name: Upload Checksums Artifact
+        if: startsWith(matrix.platform, 'windows') && hashFiles('SHA256SUMS-windows.txt') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: checksums-${{ matrix.platform }}
+          path: SHA256SUMS-windows.txt

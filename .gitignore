@@ -1,0 +1,29 @@
+# Build artifacts
+target/
+dist/
+build/
+.vite/
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Secrets & environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local databases & logs
+*.db
+*.sqlite
+*.sqlite3
+*.log
+
+# OS & editor junk
+.DS_Store
+Thumbs.db
+graphify-out/

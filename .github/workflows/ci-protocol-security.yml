@@ -1,0 +1,81 @@
+name: CI — Protocol, Security & Web Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust-workspace:
+    name: Rust Protocol, Policy & Server Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo registry and build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting, lints, and tests
+        run: |
+          if [ -f "Cargo.toml" ]; then
+            cargo fmt --all -- --check
+            cargo clippy --workspace --all-targets -- -D warnings
+            cargo test --workspace
+          else
+            echo "Cargo.toml not scaffolded yet (Issue #1 pending)."
+          fi
+
+  web-pwa:
+    name: Web PWA Typecheck & Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable pnpm via Corepack
+        run: corepack enable
+
+      - name: Install, typecheck, and build web-pwa
+        run: |
+          if [ -f "apps/web-pwa/package.json" ]; then
+            pnpm --dir apps/web-pwa install --frozen-lockfile || pnpm --dir apps/web-pwa install
+            pnpm --dir apps/web-pwa run typecheck
+            pnpm --dir apps/web-pwa run build
+          else
+            echo "apps/web-pwa/package.json not scaffolded yet (Issue #1/#5 pending)."
+          fi
+
+  repo-governance:
+    name: Governance & License Verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify required governance files exist
+        run: |
+          test -f AGENTS.md
+          test -f PLAN.md
+          test -f README.md
+          test -f docs/DECISIONS.md
+          test -f .github/SECURITY.md
+          echo "All core governance documents present."

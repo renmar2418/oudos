@@ -1,0 +1,13 @@
+[package]
+name = "oud-capture"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Platform screen capture and host-gated input injection traits for Oudos."
+
+[dependencies]
+oud-protocol = { path = "../oud-protocol" }
+
+[lints]
+workspace = true

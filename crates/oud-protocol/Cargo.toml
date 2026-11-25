@@ -1,0 +1,10 @@
+[package]
+name = "oud-protocol"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Core cryptographic identity, SAS derivation, consent state machine, SessionGrant, and hash-chained audit primitives for Oudos."
+
+[lints]
+workspace = true
