@@ -66,4 +66,8 @@ pub enum CaptureError {
     /// WebRTC peer connection, SDP, or data-channel failure.
     #[error("WebRTC transport error: {0}")]
     WebRtc(String),
+
+    /// Remote WebRTC SDP `a=fingerprint` failed signed handshake binding verification.
+    #[error("DTLS fingerprint verification failed: {0}")]
+    DtlsFingerprintMismatch(String),
 }

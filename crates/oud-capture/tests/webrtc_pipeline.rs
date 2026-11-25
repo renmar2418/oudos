@@ -11,10 +11,12 @@ use chrono::{Duration as ChronoDuration, Utc};
 use oud_capture::{
     discover_hardware_h264_adapters, AdaptiveH264Pipeline, CaptureError, EncodedVideoFrame,
     EncoderKind, HostFrameGatekeeper, HostInboundMessage, HostMediaPeer, IceConfig, QualityPreset,
-    RawFrame, ScreenCapturer, SessionTelemetry, SoftwareH264Encoder, SyntheticFrameCapturer,
-    TransportMode, TurnFallbackConfig, VideoEncoder, ViewerMediaPeer,
+    RawFrame, ScreenCapturer, SessionTelemetry, SignedSdpDescription, SoftwareH264Encoder,
+    SyntheticFrameCapturer, TransportMode, TurnFallbackConfig, VerifiedPeerContext, VideoEncoder,
+    ViewerMediaPeer,
 };
 use oud_protocol::grant::{FrameKind, GrantDuration, GrantPermissions, SessionGrant};
+use oud_protocol::handshake::{InitiatorPending, ResponderPending};
 use oud_protocol::identity::IdentityKeyPair;
 use tokio::time::{sleep, timeout};
 use uuid::Uuid;
@@ -297,10 +299,46 @@ fn windows_native_capture_probes_and_handles_session_state() {
     }
 }
 
-async fn connect_loopback_peers(host: &HostMediaPeer, viewer: &ViewerMediaPeer) {
-    let offer = host.create_offer().await.expect("offer");
+fn perform_authenticated_handshake(
+    host_keys: &IdentityKeyPair,
+    viewer_keys: &IdentityKeyPair,
+    session_id: Uuid,
+) -> (VerifiedPeerContext, VerifiedPeerContext) {
+    let (init, offer) = InitiatorPending::initiate(session_id, "support.example.org", viewer_keys);
+    let (resp, accept) = ResponderPending::respond(&offer, host_keys).expect("offer verifies");
+    let (reveal, viewer_out) = init
+        .complete(&accept, Some(&host_keys.public_key()))
+        .expect("accept verifies");
+    let host_out = resp
+        .verify_reveal_and_finalize(&reveal)
+        .expect("reveal verifies");
+    assert_eq!(viewer_out.transcript_hash, host_out.transcript_hash);
+
+    (
+        VerifiedPeerContext {
+            session_id,
+            local_pubkey: host_keys.public_key(),
+            remote_pubkey: viewer_keys.public_key(),
+            handshake_transcript_hash: host_out.transcript_hash,
+        },
+        VerifiedPeerContext {
+            session_id,
+            local_pubkey: viewer_keys.public_key(),
+            remote_pubkey: host_keys.public_key(),
+            handshake_transcript_hash: viewer_out.transcript_hash,
+        },
+    )
+}
+
+async fn connect_loopback_peers(
+    host: &HostMediaPeer,
+    viewer: &ViewerMediaPeer,
+    host_keys: &IdentityKeyPair,
+    viewer_keys: &IdentityKeyPair,
+) {
+    let offer = host.create_offer(host_keys).await.expect("offer");
     let answer = viewer
-        .accept_offer_and_create_answer(offer)
+        .accept_offer_and_create_answer(offer, viewer_keys)
         .await
         .expect("answer");
     host.accept_answer(answer).await.expect("accept answer");
@@ -417,6 +455,9 @@ async fn webrtc_loopback_1080p_auto_mode_meets_slos_and_enforces_grant_gating() 
     let session_id = Uuid::now_v7();
     let now = Utc::now();
 
+    let (host_ctx, viewer_ctx) =
+        perform_authenticated_handshake(&host_keys, &viewer_keys, session_id);
+
     let grant = SessionGrant::issue(
         &host_keys,
         session_id,
@@ -441,14 +482,14 @@ async fn webrtc_loopback_1080p_auto_mode_meets_slos_and_enforces_grant_gating() 
     let pipeline = AdaptiveH264Pipeline::new(QualityPreset::Auto).expect("H.264 pipeline");
     let ice = IceConfig::local_loopback();
 
-    let host = Box::pin(HostMediaPeer::new(&ice, gatekeeper, pipeline))
+    let host = Box::pin(HostMediaPeer::new(&ice, gatekeeper, pipeline, host_ctx))
         .await
         .expect("host peer");
-    let viewer = Box::pin(ViewerMediaPeer::new(&ice))
+    let viewer = Box::pin(ViewerMediaPeer::new(&ice, viewer_ctx))
         .await
         .expect("viewer peer");
 
-    connect_loopback_peers(&host, &viewer).await;
+    connect_loopback_peers(&host, &viewer, &host_keys, &viewer_keys).await;
     verify_grant_gating_over_data_channel(&host, &viewer, &host_keys, &grant).await;
 
     let grant_signed_at = Instant::now();
@@ -515,4 +556,199 @@ async fn webrtc_loopback_1080p_auto_mode_meets_slos_and_enforces_grant_gating() 
 
     host.close().await.expect("close host");
     viewer.close().await.expect("close viewer");
+}
+
+fn swap_fingerprint_in_sdp(sdp: &str, forged_fp: &str) -> String {
+    sdp.lines()
+        .map(|line| {
+            if line.trim_start().starts_with("a=fingerprint:") {
+                format!("a=fingerprint:sha-256 {forged_fp}")
+            } else {
+                line.to_owned()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\r\n")
+        + "\r\n"
+}
+
+#[tokio::test]
+async fn tampered_or_swapped_sdp_fingerprint_is_rejected() {
+    let host_keys = IdentityKeyPair::generate();
+    let viewer_keys = IdentityKeyPair::generate();
+    let attacker_keys = IdentityKeyPair::generate();
+    let session_id = Uuid::now_v7();
+    let now = Utc::now();
+
+    let (host_ctx, viewer_ctx) =
+        perform_authenticated_handshake(&host_keys, &viewer_keys, session_id);
+
+    let grant = SessionGrant::issue(
+        &host_keys,
+        session_id,
+        viewer_keys.public_key(),
+        "support.example.org",
+        GrantPermissions::default(),
+        GrantDuration::ThisSession,
+        now,
+    )
+    .expect("grant");
+    let gk = HostFrameGatekeeper::from_verified_grant(
+        grant,
+        host_keys.public_key(),
+        session_id,
+        viewer_keys.public_key(),
+        "support.example.org",
+        now,
+    )
+    .expect("gatekeeper");
+
+    let ice = IceConfig::local_loopback();
+    let host = Box::pin(HostMediaPeer::new(
+        &ice,
+        gk,
+        AdaptiveH264Pipeline::new(QualityPreset::Auto).expect("pipeline"),
+        host_ctx,
+    ))
+    .await
+    .expect("host");
+    let viewer = Box::pin(ViewerMediaPeer::new(&ice, viewer_ctx))
+        .await
+        .expect("viewer");
+
+    let attacker_fp =
+        "aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99";
+
+    // 1. Malicious signaling swaps SDP offer `a=fingerprint` before viewer `set_remote_description`.
+    let valid_offer = host.create_offer(&host_keys).await.expect("host offer");
+    let mut swapped_offer: SignedSdpDescription = valid_offer.clone();
+    swapped_offer.description.sdp =
+        swap_fingerprint_in_sdp(&valid_offer.description.sdp, attacker_fp);
+    let viewer_err = viewer
+        .accept_offer_and_create_answer(swapped_offer, &viewer_keys)
+        .await
+        .expect_err("viewer must reject MITM swapped SDP offer fingerprint");
+    assert!(matches!(
+        viewer_err,
+        CaptureError::DtlsFingerprintMismatch(_)
+    ));
+
+    // 2. Malicious signaling replaces binding with attacker's Ed25519 signature over swapped fingerprint.
+    let mut rogue_signed_offer = valid_offer.clone();
+    rogue_signed_offer.description.sdp =
+        swap_fingerprint_in_sdp(&valid_offer.description.sdp, attacker_fp);
+    rogue_signed_offer.fingerprint_binding.signature = attacker_keys.sign(b"forged");
+    rogue_signed_offer.fingerprint_binding.fingerprint = attacker_fp.to_owned();
+    assert!(matches!(
+        viewer
+            .accept_offer_and_create_answer(rogue_signed_offer, &viewer_keys)
+            .await,
+        Err(CaptureError::DtlsFingerprintMismatch(_))
+    ));
+
+    // 3. Duplicate / injected conflicting `a=fingerprint` line in SDP must fail closed.
+    let mut multi_fp_offer = valid_offer.clone();
+    multi_fp_offer
+        .description
+        .sdp
+        .push_str("a=fingerprint:sha-256 ");
+    multi_fp_offer.description.sdp.push_str(attacker_fp);
+    multi_fp_offer.description.sdp.push_str("\r\n");
+    assert!(matches!(
+        viewer
+            .accept_offer_and_create_answer(multi_fp_offer, &viewer_keys)
+            .await,
+        Err(CaptureError::DtlsFingerprintMismatch(_))
+    ));
+
+    // 4. Valid offer accepted by viewer; now malicious signaling swaps answer `a=fingerprint`.
+    let valid_answer = viewer
+        .accept_offer_and_create_answer(valid_offer, &viewer_keys)
+        .await
+        .expect("viewer accepts valid signed offer");
+    let mut swapped_answer = valid_answer.clone();
+    swapped_answer.description.sdp =
+        swap_fingerprint_in_sdp(&valid_answer.description.sdp, attacker_fp);
+    let host_err = host
+        .accept_answer(swapped_answer)
+        .await
+        .expect_err("host must reject MITM swapped SDP answer fingerprint");
+    assert!(matches!(host_err, CaptureError::DtlsFingerprintMismatch(_)));
+
+    // 5. Cross-session / cross-handshake replay of signed answer binding must fail closed.
+    let mut replayed_answer = valid_answer;
+    replayed_answer
+        .fingerprint_binding
+        .handshake_transcript_hash[0] ^= 0xFF;
+    assert!(matches!(
+        host.accept_answer(replayed_answer).await,
+        Err(CaptureError::DtlsFingerprintMismatch(_))
+    ));
+
+    host.close().await.expect("close host");
+    viewer.close().await.expect("close viewer");
+}
+
+#[tokio::test]
+async fn malformed_inbound_payload_increments_rejected_counters() {
+    let host_keys = IdentityKeyPair::generate();
+    let viewer_keys = IdentityKeyPair::generate();
+    let session_id = Uuid::now_v7();
+    let now = Utc::now();
+
+    let (host_ctx, _viewer_ctx) =
+        perform_authenticated_handshake(&host_keys, &viewer_keys, session_id);
+    let grant = SessionGrant::issue(
+        &host_keys,
+        session_id,
+        viewer_keys.public_key(),
+        "support.example.org",
+        GrantPermissions {
+            view_screen: true,
+            mouse_keyboard: true,
+            ..GrantPermissions::default()
+        },
+        GrantDuration::ThisSession,
+        now,
+    )
+    .expect("grant");
+    let gk = HostFrameGatekeeper::from_verified_grant(
+        grant,
+        host_keys.public_key(),
+        session_id,
+        viewer_keys.public_key(),
+        "support.example.org",
+        now,
+    )
+    .expect("gatekeeper");
+    let host = Box::pin(HostMediaPeer::new(
+        &IceConfig::local_loopback(),
+        gk,
+        AdaptiveH264Pipeline::new(QualityPreset::Auto).expect("pipeline"),
+        host_ctx,
+    ))
+    .await
+    .expect("host");
+
+    let err = host
+        .process_raw_inbound_bytes(b"corrupt-non-json", now)
+        .await
+        .expect_err("malformed input rejected");
+    assert!(matches!(
+        err,
+        CaptureError::FrameBlockedByGrant {
+            frame_kind: "malformed_input"
+        }
+    ));
+
+    let gk_guard = host.gatekeeper().lock().await;
+    assert_eq!(gk_guard.dropped_frames(), 1);
+    assert_eq!(gk_guard.rejected_malformed_payloads(), 1);
+    drop(gk_guard);
+    assert!(
+        host.drain_authorized_inputs().await.is_empty(),
+        "malformed payload must never enter authorized inputs"
+    );
+
+    host.close().await.expect("close host");
 }

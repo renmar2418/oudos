@@ -46,22 +46,78 @@ pub struct HardwareMftInfo {
     pub friendly_name: String,
 }
 
+struct ComMfGuard {
+    com_init: bool,
+    mf_started: bool,
+}
+
+impl Drop for ComMfGuard {
+    fn drop(&mut self) {
+        // SAFETY: `MFShutdown` pairs with a successful `MFStartup`, and `CoUninitialize`
+        // pairs strictly with `CoInitializeEx` returning `S_OK` / `S_FALSE`.
+        unsafe {
+            if self.mf_started {
+                let _ = MFShutdown();
+            }
+            if self.com_init {
+                CoUninitialize();
+            }
+        }
+    }
+}
+
+struct MftActivateArray {
+    ptr: *mut Option<IMFActivate>,
+    count: usize,
+}
+
+impl Drop for MftActivateArray {
+    fn drop(&mut self) {
+        if !self.ptr.is_null() {
+            // SAFETY: `ptr` is the CoTaskMem-allocated array returned by `MFTEnumEx` containing
+            // `count` `Option<IMFActivate>` COM pointers; taking and dropping each element releases
+            // its COM reference before freeing the outer buffer.
+            unsafe {
+                for idx in 0..self.count {
+                    let _ = std::ptr::read(self.ptr.add(idx));
+                }
+                CoTaskMemFree(Some(self.ptr.cast()));
+            }
+        }
+    }
+}
+
+struct CoTaskMemPwstr(windows::core::PWSTR);
+
+impl Drop for CoTaskMemPwstr {
+    fn drop(&mut self) {
+        if !self.0.is_null() {
+            // SAFETY: `self.0` was allocated by `IMFActivate::GetAllocatedString`.
+            unsafe {
+                CoTaskMemFree(Some(self.0 .0.cast()));
+            }
+        }
+    }
+}
+
 /// Probes Windows Media Foundation for hardware-accelerated H.264 encoders.
 ///
 /// Returns an empty list if no hardware H.264 MFT is installed or available.
 #[must_use]
 pub fn probe_hardware_h264_mfts() -> Vec<HardwareMftInfo> {
     let mut found = Vec::new();
-    // SAFETY: `CoInitializeEx` and `MFStartup` initialize COM/MF on the calling thread;
-    // every allocated `IMFActivate` array returned by `MFTEnumEx` is freed via `CoTaskMemFree`.
+    // SAFETY: COM/MF initialization and enumerated `IMFActivate` pointers are owned by
+    // RAII scope guards (`ComMfGuard` and `MftActivateArray`), declared so COM objects
+    // release before `MFShutdown` and `CoUninitialize`.
     unsafe {
-        let com_init = CoInitializeEx(None, COINIT_MULTITHREADED).is_ok();
+        let mut guard = ComMfGuard {
+            com_init: CoInitializeEx(None, COINIT_MULTITHREADED).is_ok(),
+            mf_started: false,
+        };
         if MFStartup(MF_VERSION, MFSTARTUP_NOSOCKET).is_err() {
-            if com_init {
-                CoUninitialize();
-            }
             return found;
         }
+        guard.mf_started = true;
 
         let input_type = MFT_REGISTER_TYPE_INFO {
             guidMajorType: MFMediaType_Video,
@@ -84,7 +140,11 @@ pub fn probe_hardware_h264_mfts() -> Vec<HardwareMftInfo> {
         );
 
         if enum_res.is_ok() && !activates.is_null() {
-            let slice = std::slice::from_raw_parts(activates, count as usize);
+            let activate_array = MftActivateArray {
+                ptr: activates,
+                count: count as usize,
+            };
+            let slice = std::slice::from_raw_parts(activate_array.ptr, activate_array.count);
             for item in slice.iter().flatten() {
                 let mut name_ptr = windows::core::PWSTR::null();
                 let mut name_len = 0u32;
@@ -97,21 +157,16 @@ pub fn probe_hardware_h264_mfts() -> Vec<HardwareMftInfo> {
                     .is_ok()
                     && !name_ptr.is_null()
                 {
-                    let label = name_ptr
+                    let name_guard = CoTaskMemPwstr(name_ptr);
+                    let label = name_guard
+                        .0
                         .to_string()
                         .unwrap_or_else(|_| "Hardware H.264 MFT".to_owned());
-                    CoTaskMemFree(Some(name_ptr.0.cast()));
                     found.push(HardwareMftInfo {
                         friendly_name: label,
                     });
                 }
             }
-            CoTaskMemFree(Some(activates.cast()));
-        }
-
-        let _ = MFShutdown();
-        if com_init {
-            CoUninitialize();
         }
     }
     found
@@ -132,30 +187,55 @@ struct DxgiDuplicationState {
     height: u32,
 }
 
+struct DxgiFrameGuard<'a> {
+    duplication: &'a IDXGIOutputDuplication,
+}
+
+impl Drop for DxgiFrameGuard<'_> {
+    fn drop(&mut self) {
+        // SAFETY: Constructed only after a successful `AcquireNextFrame`.
+        unsafe {
+            let _ = self.duplication.ReleaseFrame();
+        }
+    }
+}
+
+struct StagingMapGuard<'a> {
+    context: &'a ID3D11DeviceContext,
+    staging: &'a ID3D11Texture2D,
+}
+
+impl Drop for StagingMapGuard<'_> {
+    fn drop(&mut self) {
+        // SAFETY: Constructed only after a successful `ID3D11DeviceContext::Map`.
+        unsafe {
+            self.context.Unmap(self.staging, 0);
+        }
+    }
+}
+
 impl WindowsDesktopCapturer {
     /// Initializes Windows Desktop Duplication on primary display output 0,
-    /// falling back to GDI screen capture if Desktop Duplication is unsupported
-    /// in the current session.
+    /// falling back to GDI screen capture only if DXGI initialization fails with a
+    /// non-availability driver error ([`CaptureError::CaptureFailed`]).
+    ///
+    /// Propagates [`CaptureError::ScreenUnavailable`] (`Locked`, `PermissionMissing`,
+    /// `NoDisplay`, `Asleep`) directly instead of masking OS restrictions with GDI.
     ///
     /// # Errors
-    /// Returns [`CaptureError::ScreenUnavailable`] if no monitor is active or capture
-    /// permissions are denied by the active desktop session.
+    /// Returns [`CaptureError::ScreenUnavailable`] if locked, asleep, headless, or lacking
+    /// display capture permissions.
     pub fn new() -> Result<Self, CaptureError> {
-        match DxgiDuplicationState::try_init() {
-            Ok((state, geom)) => Ok(Self {
+        match resolve_dxgi_init(DxgiDuplicationState::try_init(), probe_gdi_geometry) {
+            Ok((Some(state), geometry)) => Ok(Self {
                 dupl: Some(state),
-                geometry: geom,
+                geometry,
             }),
-            Err(CaptureError::ScreenUnavailable(ScreenUnavailableReason::NoDisplay)) => Err(
-                CaptureError::ScreenUnavailable(ScreenUnavailableReason::NoDisplay),
-            ),
-            Err(_) => {
-                let geom = probe_gdi_geometry()?;
-                Ok(Self {
-                    dupl: None,
-                    geometry: geom,
-                })
-            }
+            Ok((None, geometry)) => Ok(Self {
+                dupl: None,
+                geometry,
+            }),
+            Err(err) => Err(err),
         }
     }
 }
@@ -176,19 +256,42 @@ impl ScreenCapturer for WindowsDesktopCapturer {
 
     fn capture_frame(&mut self) -> Result<RawFrame, CaptureError> {
         if let Some(state) = &mut self.dupl {
-            match state.capture_next_frame() {
-                Ok(frame) => return Ok(frame),
-                Err(CaptureError::ScreenUnavailable(ScreenUnavailableReason::Locked)) => {
-                    return Err(CaptureError::ScreenUnavailable(
-                        ScreenUnavailableReason::Locked,
-                    ));
-                }
-                Err(_) => {
-                    // Attempt GDI capture if DXGI duplication became temporarily unavailable.
-                }
-            }
+            return route_dxgi_capture(state.capture_next_frame(), || {
+                capture_gdi_frame(&self.geometry)
+            });
         }
         capture_gdi_frame(&self.geometry)
+    }
+}
+
+fn resolve_dxgi_init<S, F>(
+    dxgi_result: Result<(S, DisplayGeometry), CaptureError>,
+    gdi_probe: F,
+) -> Result<(Option<S>, DisplayGeometry), CaptureError>
+where
+    F: FnOnce() -> Result<DisplayGeometry, CaptureError>,
+{
+    match dxgi_result {
+        Ok((state, geom)) => Ok((Some(state), geom)),
+        Err(err @ CaptureError::ScreenUnavailable(_)) => Err(err),
+        Err(_) => {
+            let geom = gdi_probe()?;
+            Ok((None, geom))
+        }
+    }
+}
+
+fn route_dxgi_capture<F>(
+    dxgi_frame: Result<RawFrame, CaptureError>,
+    gdi_capture: F,
+) -> Result<RawFrame, CaptureError>
+where
+    F: FnOnce() -> Result<RawFrame, CaptureError>,
+{
+    match dxgi_frame {
+        Ok(frame) => Ok(frame),
+        Err(err @ CaptureError::ScreenUnavailable(_)) => Err(err),
+        Err(_) => gdi_capture(),
     }
 }
 
@@ -235,8 +338,13 @@ impl DxgiDuplicationState {
                 .map_err(|e| map_hresult(e.code().0))?;
 
             let dupl_desc = duplication.GetDesc();
-            let width = dupl_desc.ModeDesc.Width.max(1);
-            let height = dupl_desc.ModeDesc.Height.max(1);
+            let width = dupl_desc.ModeDesc.Width;
+            let height = dupl_desc.ModeDesc.Height;
+            if width == 0 || height == 0 {
+                return Err(CaptureError::ScreenUnavailable(
+                    ScreenUnavailableReason::NoDisplay,
+                ));
+            }
 
             let staging_desc = D3D11_TEXTURE2D_DESC {
                 Width: width,
@@ -314,6 +422,9 @@ impl DxgiDuplicationState {
                 }
                 return Err(map_hresult(code.0));
             }
+            let frame_guard = DxgiFrameGuard {
+                duplication: &self.duplication,
+            };
 
             let mut dirty_rects = Vec::new();
             if frame_info.TotalMetadataBufferSize > 0 {
@@ -328,41 +439,41 @@ impl DxgiDuplicationState {
                 {
                     let count = (required as usize) / std::mem::size_of::<RECT>();
                     for r in rects.into_iter().take(count) {
-                        dirty_rects.push(Rect {
-                            x: r.left,
-                            y: r.top,
-                            width: u32::try_from(r.right - r.left).unwrap_or(0),
-                            height: u32::try_from(r.bottom - r.top).unwrap_or(0),
-                        });
+                        if let Some(dirty) =
+                            dirty_rect_from_bounds(r.left, r.top, r.right, r.bottom)
+                        {
+                            dirty_rects.push(dirty);
+                        }
                     }
                 }
             }
 
             let resource = resource_opt.ok_or_else(|| {
-                let _ = self.duplication.ReleaseFrame();
                 CaptureError::CaptureFailed("DXGI returned empty desktop resource".to_owned())
             })?;
-            let src_tex: ID3D11Texture2D = match resource.cast() {
-                Ok(t) => t,
-                Err(e) => {
-                    let _ = self.duplication.ReleaseFrame();
-                    return Err(CaptureError::CaptureFailed(e.to_string()));
-                }
-            };
+            let src_tex: ID3D11Texture2D = resource
+                .cast()
+                .map_err(|e| CaptureError::CaptureFailed(e.to_string()))?;
 
             self.context.CopyResource(&self.staging, &src_tex);
             let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
-            if let Err(e) =
-                self.context
-                    .Map(&self.staging, 0, D3D11_MAP_READ, 0, Some(&raw mut mapped))
-            {
-                let _ = self.duplication.ReleaseFrame();
-                return Err(CaptureError::CaptureFailed(e.to_string()));
-            }
+            self.context
+                .Map(&self.staging, 0, D3D11_MAP_READ, 0, Some(&raw mut mapped))
+                .map_err(|e| CaptureError::CaptureFailed(e.to_string()))?;
+            let map_guard = StagingMapGuard {
+                context: &self.context,
+                staging: &self.staging,
+            };
 
-            let row_bytes = (self.width as usize) * 4;
-            let pitch = mapped.RowPitch as usize;
-            let mut data = vec![0u8; row_bytes * (self.height as usize)];
+            let (row_bytes, pitch, total_bytes) = validate_mapped_frame_layout(
+                self.width,
+                self.height,
+                mapped.RowPitch,
+                mapped.pData.is_null(),
+            )?;
+            debug_assert!(pitch >= row_bytes);
+
+            let mut data = vec![0u8; total_bytes];
             for y in 0..(self.height as usize) {
                 let src_row =
                     std::slice::from_raw_parts(mapped.pData.cast::<u8>().add(y * pitch), row_bytes);
@@ -370,8 +481,8 @@ impl DxgiDuplicationState {
                 data[dst_start..dst_start + row_bytes].copy_from_slice(src_row);
             }
 
-            self.context.Unmap(&self.staging, 0);
-            let _ = self.duplication.ReleaseFrame();
+            drop(map_guard);
+            drop(frame_guard);
             let _ = &self.device;
 
             Ok(RawFrame {
@@ -507,6 +618,59 @@ fn capture_gdi_frame(geometry: &DisplayGeometry) -> Result<RawFrame, CaptureErro
     }
 }
 
+fn dirty_rect_from_bounds(left: i32, top: i32, right: i32, bottom: i32) -> Option<Rect> {
+    let w = right.checked_sub(left)?;
+    let h = bottom.checked_sub(top)?;
+    if w <= 0 || h <= 0 {
+        return None;
+    }
+    Some(Rect {
+        x: left,
+        y: top,
+        width: u32::try_from(w).ok()?,
+        height: u32::try_from(h).ok()?,
+    })
+}
+
+fn validate_mapped_frame_layout(
+    width: u32,
+    height: u32,
+    row_pitch: u32,
+    pdata_is_null: bool,
+) -> Result<(usize, usize, usize), CaptureError> {
+    if pdata_is_null {
+        return Err(CaptureError::CaptureFailed(
+            "DXGI mapped staging texture has null pData".to_owned(),
+        ));
+    }
+    if width == 0 || height == 0 {
+        return Err(CaptureError::ScreenUnavailable(
+            ScreenUnavailableReason::NoDisplay,
+        ));
+    }
+    let width_usize = usize::try_from(width)
+        .map_err(|_| CaptureError::CaptureFailed("DXGI frame width overflow".to_owned()))?;
+    let height_usize = usize::try_from(height)
+        .map_err(|_| CaptureError::CaptureFailed("DXGI frame height overflow".to_owned()))?;
+    let row_bytes = width_usize
+        .checked_mul(4)
+        .ok_or_else(|| CaptureError::CaptureFailed("DXGI row_bytes overflow".to_owned()))?;
+    let pitch = usize::try_from(row_pitch)
+        .map_err(|_| CaptureError::CaptureFailed("DXGI RowPitch overflow".to_owned()))?;
+    if pitch < row_bytes {
+        return Err(CaptureError::CaptureFailed(format!(
+            "DXGI RowPitch ({pitch}) is smaller than row_bytes ({row_bytes})"
+        )));
+    }
+    let total_bytes = row_bytes
+        .checked_mul(height_usize)
+        .ok_or_else(|| CaptureError::CaptureFailed("DXGI pixel buffer size overflow".to_owned()))?;
+    let _ = pitch
+        .checked_mul(height_usize)
+        .ok_or_else(|| CaptureError::CaptureFailed("DXGI mapped pitch span overflow".to_owned()))?;
+    Ok((row_bytes, pitch, total_bytes))
+}
+
 fn map_hresult(code: i32) -> CaptureError {
     if code == DXGI_ERROR_ACCESS_LOST.0 || code == E_ACCESSDENIED_HRESULT {
         CaptureError::ScreenUnavailable(ScreenUnavailableReason::Locked)
@@ -516,5 +680,104 @@ fn map_hresult(code: i32) -> CaptureError {
         CaptureError::ScreenUnavailable(ScreenUnavailableReason::PermissionMissing)
     } else {
         CaptureError::CaptureFailed(format!("Win32/DXGI HRESULT 0x{code:08X}"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dirty_rect_uses_checked_sub_and_requires_positive_dimensions() {
+        assert_eq!(
+            dirty_rect_from_bounds(10, 20, 110, 220),
+            Some(Rect {
+                x: 10,
+                y: 20,
+                width: 100,
+                height: 200,
+            })
+        );
+        assert_eq!(dirty_rect_from_bounds(10, 20, 10, 220), None);
+        assert_eq!(dirty_rect_from_bounds(10, 20, 110, 20), None);
+        assert_eq!(dirty_rect_from_bounds(50, 50, 10, 100), None);
+        assert_eq!(dirty_rect_from_bounds(i32::MIN, 0, i32::MAX, 10), None);
+    }
+
+    #[test]
+    fn validate_mapped_layout_rejects_small_row_pitch_null_and_overflow() {
+        assert!(matches!(
+            validate_mapped_frame_layout(1920, 1080, 1920 * 4 - 4, false),
+            Err(CaptureError::CaptureFailed(_))
+        ));
+        assert!(matches!(
+            validate_mapped_frame_layout(1920, 1080, 1920 * 4, true),
+            Err(CaptureError::CaptureFailed(_))
+        ));
+        assert!(matches!(
+            validate_mapped_frame_layout(0, 1080, 64, false),
+            Err(CaptureError::ScreenUnavailable(
+                ScreenUnavailableReason::NoDisplay
+            ))
+        ));
+        assert!(matches!(
+            validate_mapped_frame_layout(u32::MAX, 4, u32::MAX, false),
+            Err(CaptureError::CaptureFailed(_))
+        ));
+
+        let (row_bytes, pitch, total_bytes) =
+            validate_mapped_frame_layout(1920, 1080, 1920 * 4 + 256, false)
+                .expect("padded stride succeeds");
+        assert_eq!(row_bytes, 1920 * 4);
+        assert_eq!(pitch, 1920 * 4 + 256);
+        assert_eq!(total_bytes, 1920 * 4 * 1080);
+    }
+
+    #[test]
+    fn dxgi_locked_and_permission_missing_propagate_without_gdi_fallback() {
+        for reason in [
+            ScreenUnavailableReason::Locked,
+            ScreenUnavailableReason::PermissionMissing,
+            ScreenUnavailableReason::NoDisplay,
+            ScreenUnavailableReason::Asleep,
+        ] {
+            let init_err: Result<((), DisplayGeometry), CaptureError> =
+                Err(CaptureError::ScreenUnavailable(reason));
+            let res = resolve_dxgi_init(init_err, || {
+                panic!("GDI fallback must NOT mask ScreenUnavailable::{reason:?}")
+            });
+            assert!(matches!(res, Err(CaptureError::ScreenUnavailable(r)) if r == reason));
+
+            let cap_res = route_dxgi_capture(Err(CaptureError::ScreenUnavailable(reason)), || {
+                panic!("GDI capture must NOT mask ScreenUnavailable::{reason:?}")
+            });
+            assert!(matches!(cap_res, Err(CaptureError::ScreenUnavailable(r)) if r == reason));
+        }
+
+        // Non-availability driver errors still fall back to GDI cleanly.
+        let mut fallback_called = false;
+        let res = resolve_dxgi_init::<(), _>(
+            Err(CaptureError::CaptureFailed(
+                "DXGI unsupported surface".to_owned(),
+            )),
+            || {
+                fallback_called = true;
+                Ok(DisplayGeometry {
+                    width: 1280,
+                    height: 720,
+                    refresh_hz: 60,
+                    monitor_name: "GDI-Fallback".to_owned(),
+                })
+            },
+        )
+        .expect("GDI init fallback succeeds");
+        assert!(fallback_called);
+        assert!(res.0.is_none());
+        assert_eq!(res.1.width, 1280);
+    }
+
+    #[test]
+    fn probe_hardware_h264_mfts_releases_com_objects_cleanly() {
+        let _ = probe_hardware_h264_mfts();
     }
 }

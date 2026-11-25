@@ -28,7 +28,8 @@ pub use oud_protocol::PROTOCOL_VERSION;
 pub use preset::{EncodeProfile, QualityPreset};
 pub use telemetry::{SessionTelemetry, TelemetrySnapshot};
 pub use webrtc_peer::{
-    DeliveredVideoFrame, HostInboundMessage, HostMediaPeer, ReceivedRtpFrame, ViewerMediaPeer,
+    DeliveredVideoFrame, DtlsFingerprintBinding, HostInboundMessage, HostMediaPeer,
+    ReceivedRtpFrame, SignedSdpDescription, VerifiedPeerContext, ViewerMediaPeer,
 };
 
 /// Supported host capture backends.
