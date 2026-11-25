@@ -93,6 +93,26 @@ export const App: React.FC<AppProps> = ({
     }
   }, [bridge]);
 
+  const handleBlockAndReport = useCallback(
+    async (category: string, summary: string) => {
+      if (!bridge.blockAndReportPending) {
+        await handleDeny();
+        return;
+      }
+      setSubmitting(true);
+      setErrorMessage(null);
+      try {
+        const next = await bridge.blockAndReportPending(category, summary);
+        setSnapshot(next);
+      } catch (err) {
+        setErrorMessage(err instanceof Error ? err.message : String(err));
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [bridge, handleDeny]
+  );
+
   const handleEndSession = useCallback(async () => {
     try {
       const next = await bridge.endActiveSessionLocal();
@@ -145,6 +165,7 @@ export const App: React.FC<AppProps> = ({
         errorMessage={errorMessage}
         onAllow={handleAllow}
         onDeny={handleDeny}
+        onBlockAndReport={handleBlockAndReport}
       />
     );
   }

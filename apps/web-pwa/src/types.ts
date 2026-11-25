@@ -31,6 +31,24 @@ export interface FileTransferItem {
   statusMessage?: string;
 }
 
+export type AbuseCategory =
+  | "impersonation"
+  | "harassment"
+  | "scam_attempt"
+  | "other";
+
+export interface SupportLinkItem {
+  linkId: string;
+  deviceId: string;
+  deviceAlias: string;
+  serverDomain: string;
+  serverPubkey: string;
+  supportUrl: string;
+  createdAtMs: number;
+  expiresAtMs: number;
+  redeemed: boolean;
+}
+
 export type IdleTimeoutOption = "15m" | "30m" | "1h" | "never";
 
 export type PolicyScope = "organisation" | "group" | "device_owner" | "v0_1_lock";

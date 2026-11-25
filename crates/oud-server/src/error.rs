@@ -24,6 +24,9 @@ pub enum ServerError {
     /// Resource already exists or sequence/hash conflict.
     #[error("conflict: {0}")]
     Conflict(String),
+    /// Support link or ephemeral resource has expired.
+    #[error("gone: {0}")]
+    Gone(String),
     /// Requester is locked out or rate-limited.
     #[error("rate limited: {0}")]
     RateLimited(String),
@@ -46,6 +49,7 @@ impl IntoResponse for ServerError {
             Self::Forbidden(_) => (StatusCode::FORBIDDEN, "FORBIDDEN"),
             Self::NotFound(_) => (StatusCode::NOT_FOUND, "NOT_FOUND"),
             Self::Conflict(_) => (StatusCode::CONFLICT, "CONFLICT"),
+            Self::Gone(_) => (StatusCode::GONE, "GONE"),
             Self::RateLimited(_) => (StatusCode::TOO_MANY_REQUESTS, "RATE_LIMITED"),
             Self::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR"),
         };

@@ -2,8 +2,9 @@
 //! lockout, fail-closed WebSocket signaling, and verifiable hash-chained CSV export.
 
 use std::net::SocketAddr;
+use std::sync::{Arc, Mutex};
 
-use chrono::Utc;
+use chrono::{DateTime, Duration, Utc};
 use futures_util::{SinkExt, StreamExt};
 use oud_policy::PolicyLayer;
 use oud_protocol::audit::{AuditChain, AuditEvent, AuditEventKind, GENESIS_HASH};
@@ -11,7 +12,11 @@ use oud_protocol::grant::GrantPermissions;
 use oud_protocol::identity::{DeviceId, IdentityKeyPair, IdentityPublicKey, IdentitySignature};
 use oud_server::audit::AppendAuditResponse;
 use oud_server::auth::{ChallengeResponse, RegisterResponse, VerifyResponse};
+use oud_server::rate_limit::BlockedRequesterRecord;
 use oud_server::signaling::SignalEnvelope;
+use oud_server::support_links::{
+    AbuseReportRecord, AbuseReportResponse, CreateSupportLinkResponse, RedeemSupportLinkResponse,
+};
 use oud_server::{
     build_router, AppState, DevicePresence, DeviceRecord, EnrollDeviceResponse, ServerInfoResponse,
     SessionOutcomeResponse,
@@ -457,4 +462,289 @@ async fn monotonic_policy_rejects_owner_relaxation_via_api() {
         .await
         .expect("put rogue owner");
     assert_eq!(owner_res.status(), StatusCode::FORBIDDEN);
+}
+
+async fn spawn_test_server_with_clock(
+    initial_now: DateTime<Utc>,
+) -> (TestServer, Arc<Mutex<DateTime<Utc>>>) {
+    let keypair = IdentityKeyPair::generate();
+    let server_pubkey = keypair.public_key();
+    let clock_state = Arc::new(Mutex::new(initial_now));
+    let clock_clone = Arc::clone(&clock_state);
+    let state = AppState::with_clock(
+        ":memory:",
+        "support.example.org",
+        keypair,
+        Arc::new(move || *clock_clone.lock().expect("clock lock")),
+    )
+    .expect("in-memory db");
+    let app = build_router(state);
+
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind ephemeral port");
+    let addr: SocketAddr = listener.local_addr().expect("local addr");
+
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.expect("serve test app");
+    });
+
+    (
+        TestServer {
+            base_url: format!("http://{addr}"),
+            ws_base_url: format!("ws://{addr}"),
+            server_pubkey,
+        },
+        clock_state,
+    )
+}
+
+async fn enroll_device_for_test(
+    client: &reqwest::Client,
+    base_url: &str,
+    token: &str,
+    device_id_str: &str,
+) {
+    let host_kp = IdentityKeyPair::generate();
+    let device_id = DeviceId::parse(device_id_str).expect("valid id");
+    let proof_msg = format!(
+        "support.example.org:{}:{}",
+        device_id.as_compact(),
+        host_kp.public_key().to_prefixed_hex()
+    );
+    let res = client
+        .post(format!("{base_url}/api/v1/devices/enroll"))
+        .bearer_auth(token)
+        .json(&json!({
+            "device_id": device_id,
+            "device_pubkey": host_kp.public_key(),
+            "alias": format!("Device-{device_id_str}"),
+            "os_name": "Windows 11",
+            "host_signature": host_kp.sign(proof_msg.as_bytes())
+        }))
+        .send()
+        .await
+        .expect("enroll");
+    assert_eq!(res.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn support_link_enforces_15_minute_expiry_single_use_and_server_binding() {
+    let t0 = Utc::now();
+    let (srv, clock) = spawn_test_server_with_clock(t0).await;
+    let client = reqwest::Client::new();
+    let owner_pk = IdentityKeyPair::generate();
+    let tech_pk = IdentityKeyPair::generate();
+    let owner_tok =
+        authenticate_user(&client, &srv.base_url, "owner1@example.org", &owner_pk).await;
+    let tech_tok = authenticate_user(&client, &srv.base_url, "tech1@example.org", &tech_pk).await;
+
+    enroll_device_for_test(&client, &srv.base_url, &owner_tok, "482190734").await;
+
+    // TTL > 900s (15 min) rejected.
+    let too_long = client
+        .post(format!("{}/api/v1/support-links", srv.base_url))
+        .bearer_auth(&owner_tok)
+        .json(&json!({ "device_id": "482190734", "ttl_secs": 901 }))
+        .send()
+        .await
+        .expect("create too long");
+    assert_eq!(too_long.status(), StatusCode::BAD_REQUEST);
+
+    // Create fresh 15-min link and verify server binding + single use.
+    let link_res = client
+        .post(format!("{}/api/v1/support-links", srv.base_url))
+        .bearer_auth(&owner_tok)
+        .json(&json!({ "device_id": "482190734" }))
+        .send()
+        .await
+        .expect("create link");
+    assert_eq!(link_res.status(), StatusCode::OK);
+    let link: CreateSupportLinkResponse = link_res.json().await.expect("link json");
+    assert_eq!(link.server_domain, "support.example.org");
+    assert_eq!(link.server_pubkey, srv.server_pubkey);
+
+    // Mismatched server domain or pubkey fails closed.
+    let wrong_domain = client
+        .post(format!("{}/api/v1/support-links/redeem", srv.base_url))
+        .bearer_auth(&tech_tok)
+        .json(&json!({
+            "token": link.token,
+            "expected_server_domain": "evil-impostor.example"
+        }))
+        .send()
+        .await
+        .expect("wrong domain");
+    assert_eq!(wrong_domain.status(), StatusCode::FORBIDDEN);
+
+    let wrong_pk = client
+        .post(format!("{}/api/v1/support-links/redeem", srv.base_url))
+        .bearer_auth(&tech_tok)
+        .json(&json!({
+            "token": link.token,
+            "expected_server_pubkey": IdentityKeyPair::generate().public_key()
+        }))
+        .send()
+        .await
+        .expect("wrong pubkey");
+    assert_eq!(wrong_pk.status(), StatusCode::FORBIDDEN);
+
+    // Valid redemption succeeds once, then second redemption is rejected (409 Conflict).
+    let ok_redeem = client
+        .post(format!("{}/api/v1/support-links/redeem", srv.base_url))
+        .bearer_auth(&tech_tok)
+        .json(&json!({
+            "token": link.token,
+            "expected_server_domain": "support.example.org",
+            "expected_server_pubkey": srv.server_pubkey
+        }))
+        .send()
+        .await
+        .expect("redeem ok");
+    assert_eq!(ok_redeem.status(), StatusCode::OK);
+    let redeemed: RedeemSupportLinkResponse = ok_redeem.json().await.expect("redeem json");
+    assert_eq!(redeemed.server_domain, "support.example.org");
+
+    let replay_redeem = client
+        .post(format!("{}/api/v1/support-links/redeem", srv.base_url))
+        .bearer_auth(&tech_tok)
+        .json(&json!({ "token": link.token }))
+        .send()
+        .await
+        .expect("replay redeem");
+    assert_eq!(replay_redeem.status(), StatusCode::CONFLICT);
+
+    // Advance clock past 15 minutes (> 900s) -> expired link returns 410 Gone.
+    let link2: CreateSupportLinkResponse = client
+        .post(format!("{}/api/v1/support-links", srv.base_url))
+        .bearer_auth(&owner_tok)
+        .json(&json!({ "device_id": "482190734", "ttl_secs": 900 }))
+        .send()
+        .await
+        .expect("link2")
+        .json()
+        .await
+        .expect("link2 json");
+    *clock.lock().expect("clock") = t0 + Duration::seconds(901);
+
+    let expired_redeem = client
+        .post(format!("{}/api/v1/support-links/redeem", srv.base_url))
+        .bearer_auth(&tech_tok)
+        .json(&json!({ "token": link2.token }))
+        .send()
+        .await
+        .expect("expired redeem");
+    assert_eq!(expired_redeem.status(), StatusCode::GONE);
+}
+
+#[tokio::test]
+async fn requester_blocking_flood_rate_limit_and_abuse_reporting() {
+    let srv = spawn_test_server().await;
+    let client = reqwest::Client::new();
+    let owner_pk = IdentityKeyPair::generate();
+    let abuser_pk = IdentityKeyPair::generate();
+    let owner_tok =
+        authenticate_user(&client, &srv.base_url, "owner2@example.org", &owner_pk).await;
+    let abuser_tok =
+        authenticate_user(&client, &srv.base_url, "abuser@example.org", &abuser_pk).await;
+
+    enroll_device_for_test(&client, &srv.base_url, &owner_tok, "987654321").await;
+
+    let link: CreateSupportLinkResponse = client
+        .post(format!("{}/api/v1/support-links", srv.base_url))
+        .bearer_auth(&owner_tok)
+        .json(&json!({ "device_id": "987654321" }))
+        .send()
+        .await
+        .expect("link")
+        .json()
+        .await
+        .expect("link json");
+
+    // Host submits an abuse report with automatic blocking.
+    let report_res = client
+        .post(format!("{}/api/v1/abuse/report", srv.base_url))
+        .bearer_auth(&owner_tok)
+        .json(&json!({
+            "device_id": "987654321",
+            "requester_pubkey": abuser_pk.public_key(),
+            "category": "scam_attempt",
+            "summary": "Claimed to be bank fraud department",
+            "also_block": true
+        }))
+        .send()
+        .await
+        .expect("report");
+    assert_eq!(report_res.status(), StatusCode::OK);
+    let report: AbuseReportResponse = report_res.json().await.expect("report json");
+    assert!(report.blocked);
+    assert_eq!(report.sla_target, "24h");
+
+    let blocks: Vec<BlockedRequesterRecord> = client
+        .get(format!("{}/api/v1/devices/987654321/blocks", srv.base_url))
+        .bearer_auth(&owner_tok)
+        .send()
+        .await
+        .expect("list blocks")
+        .json()
+        .await
+        .expect("blocks json");
+    assert_eq!(blocks.len(), 1);
+
+    let reports: Vec<AbuseReportRecord> = client
+        .get(format!("{}/api/v1/abuse/reports", srv.base_url))
+        .bearer_auth(&owner_tok)
+        .send()
+        .await
+        .expect("list reports")
+        .json()
+        .await
+        .expect("reports json");
+    assert_eq!(reports.len(), 1);
+
+    // Blocked requester is rejected (403) on both session requests and support link redemption.
+    let blocked_req = client
+        .post(format!("{}/api/v1/sessions/request", srv.base_url))
+        .bearer_auth(&abuser_tok)
+        .json(&json!({ "device_id": "987654321" }))
+        .send()
+        .await
+        .expect("blocked req");
+    assert_eq!(blocked_req.status(), StatusCode::FORBIDDEN);
+
+    let blocked_redeem = client
+        .post(format!("{}/api/v1/support-links/redeem", srv.base_url))
+        .bearer_auth(&abuser_tok)
+        .json(&json!({ "token": link.token }))
+        .send()
+        .await
+        .expect("blocked redeem");
+    assert_eq!(blocked_redeem.status(), StatusCode::FORBIDDEN);
+
+    // Per-device aggregate flood limit rejects > 25 requests in 60s across multiple requesters.
+    for i in 0..3 {
+        let flood_pk = IdentityKeyPair::generate();
+        let flood_tok = authenticate_user(
+            &client,
+            &srv.base_url,
+            &format!("flood{i}@example.org"),
+            &flood_pk,
+        )
+        .await;
+        for attempt in 0..10 {
+            let r = client
+                .post(format!("{}/api/v1/sessions/request", srv.base_url))
+                .bearer_auth(&flood_tok)
+                .json(&json!({ "device_id": "987654321" }))
+                .send()
+                .await
+                .expect("flood req");
+            let total_idx = i * 10 + attempt;
+            if total_idx < 25 {
+                assert_eq!(r.status(), StatusCode::OK);
+            } else {
+                assert_eq!(r.status(), StatusCode::TOO_MANY_REQUESTS);
+            }
+        }
+    }
 }

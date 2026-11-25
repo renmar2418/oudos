@@ -218,4 +218,41 @@ describe("Oudos web-pwa screens, edge states & accessibility", () => {
 
     await expectZeroAxeViolations(container);
   });
+
+  it("enforces 15-minute support link expiry, server binding, single-use, and block/report flow", async () => {
+    const { transport } = createMemoryTransport();
+    const { container } = render(<App transport={transport} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Issue 15-min link/i }));
+    expect(screen.getByText(/expires in 15 minutes/i)).toBeInTheDocument();
+
+    // Test >15m expiry rejection
+    fireEvent.click(screen.getByRole("button", { name: /Test >15m expiry/i }));
+    expect(screen.getByRole("alert")).toHaveTextContent(/15-minute expiry window elapsed/i);
+
+    // Test mismatched server domain rejection
+    const domainInput = screen.getByLabelText(/Enrolled server domain check/i);
+    fireEvent.change(domainInput, { target: { value: "impostor.example.org" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Redeem link$/i }));
+    expect(screen.getByRole("alert")).toHaveTextContent(/server domain mismatch/i);
+
+    // Fix domain -> single-use redemption succeeds once, second attempt fails
+    fireEvent.change(domainInput, { target: { value: "support.example.org" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Redeem link$/i }));
+    expect(screen.getByText(/Support link redeemed once/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^Redeem link$/i }));
+    expect(screen.getByRole("alert")).toHaveTextContent(/already redeemed/i);
+
+    // Block requester & submit abuse report
+    fireEvent.change(screen.getByLabelText(/Requester identity or key/i), {
+      target: { value: "scammer@evil.example" },
+    });
+    fireEvent.change(screen.getByLabelText(/Incident summary/i), {
+      target: { value: "Pretended to be bank fraud support" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Block & submit abuse report/i }));
+    expect(screen.getByText(/Blocked "scammer@evil.example"/i)).toBeInTheDocument();
+
+    await expectZeroAxeViolations(container);
+  });
 });

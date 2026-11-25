@@ -2,20 +2,38 @@ import React, { useMemo, useState } from "react";
 import {
   Bell,
   BellRing,
+  Clock,
+  Link2,
   Monitor,
   MonitorOff,
   Plus,
   Search,
   ShieldAlert,
+  ShieldBan,
   ShieldCheck,
 } from "lucide-react";
-import type { DeviceItem, DevicePresence } from "../types";
+import type {
+  AbuseCategory,
+  DeviceItem,
+  DevicePresence,
+  SupportLinkItem,
+} from "../types";
+
+const SUPPORT_LINK_TTL_MS = 15 * 60 * 1000;
 
 interface DevicesScreenProps {
   devices: DeviceItem[];
   onConnect: (device: DeviceItem) => void;
   onOpenAddDevice: () => void;
   onToggleNotify: (deviceId: string) => void;
+  onCreateSupportLink?: (link: SupportLinkItem) => void;
+  onRedeemSupportLink?: (linkId: string) => void;
+  onBlockAndReport?: (
+    device: DeviceItem,
+    requester: string,
+    category: AbuseCategory,
+    summary: string
+  ) => void;
 }
 
 const PRESENCE_LABELS: Record<DevicePresence, string> = {
@@ -35,9 +53,91 @@ export const DevicesScreen: React.FC<DevicesScreenProps> = ({
   onConnect,
   onOpenAddDevice,
   onToggleNotify,
+  onCreateSupportLink,
+  onRedeemSupportLink,
+  onBlockAndReport,
 }) => {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | DevicePresence>("all");
+  const [supportLinks, setSupportLinks] = useState<SupportLinkItem[]>([]);
+  const [linkVerifyDomain, setLinkVerifyDomain] = useState("");
+  const [linkStatusMessage, setLinkStatusMessage] = useState<string | null>(null);
+  const [linkErrorMessage, setLinkErrorMessage] = useState<string | null>(null);
+  const [abuseDeviceId, setAbuseDeviceId] = useState<string>(devices[0]?.deviceId ?? "");
+  const [abuseRequester, setAbuseRequester] = useState("");
+  const [abuseCategory, setAbuseCategory] = useState<AbuseCategory>("scam_attempt");
+  const [abuseSummary, setAbuseSummary] = useState("");
+  const [abuseConfirmation, setAbuseConfirmation] = useState<string | null>(null);
+
+  const handleIssue15MinLink = (device: DeviceItem) => {
+    const nowMs = Date.now();
+    const linkId = `sup-${nowMs}-${Math.floor(Math.random() * 1000)}`;
+    const link: SupportLinkItem = {
+      linkId,
+      deviceId: device.deviceId,
+      deviceAlias: device.alias,
+      serverDomain: device.serverDomain,
+      serverPubkey: device.pinnedPubkey,
+      supportUrl: `https://${device.serverDomain}/support/${linkId}`,
+      createdAtMs: nowMs,
+      expiresAtMs: nowMs + SUPPORT_LINK_TTL_MS,
+      redeemed: false,
+    };
+    setSupportLinks((prev) => [link, ...prev.slice(0, 3)]);
+    setLinkVerifyDomain(device.serverDomain);
+    setLinkErrorMessage(null);
+    setLinkStatusMessage(
+      `One-time link issued for ${device.alias} (bound to ${device.serverDomain}, expires in 15 minutes).`
+    );
+    onCreateSupportLink?.(link);
+  };
+
+  const handleRedeemLink = (link: SupportLinkItem, simulatedOffsetMs = 0) => {
+    setLinkErrorMessage(null);
+    setLinkStatusMessage(null);
+    const checkNow = Date.now() + simulatedOffsetMs;
+    if (link.redeemed) {
+      setLinkErrorMessage("Support link rejected: single-use token already redeemed.");
+      return;
+    }
+    if (
+      linkVerifyDomain.trim() &&
+      linkVerifyDomain.trim().toLowerCase() !== link.serverDomain.toLowerCase()
+    ) {
+      setLinkErrorMessage(
+        `Support link rejected: server domain mismatch (expected ${link.serverDomain}).`
+      );
+      return;
+    }
+    if (checkNow >= link.expiresAtMs) {
+      setLinkErrorMessage("Support link rejected: 15-minute expiry window elapsed.");
+      return;
+    }
+    setSupportLinks((prev) =>
+      prev.map((item) =>
+        item.linkId === link.linkId ? { ...item, redeemed: true } : item
+      )
+    );
+    setLinkStatusMessage(`Support link redeemed once on ${link.serverDomain}.`);
+    onRedeemSupportLink?.(link.linkId);
+  };
+
+  const handleSubmitAbuse = (e: React.FormEvent) => {
+    e.preventDefault();
+    const target = devices.find((d) => d.deviceId === abuseDeviceId) ?? devices[0];
+    if (!target || !abuseRequester.trim() || !abuseSummary.trim()) return;
+    onBlockAndReport?.(
+      target,
+      abuseRequester.trim(),
+      abuseCategory,
+      abuseSummary.trim()
+    );
+    setAbuseConfirmation(
+      `Blocked "${abuseRequester.trim()}" on ${target.alias} and logged abuse report (24h review target).`
+    );
+    setAbuseRequester("");
+    setAbuseSummary("");
+  };
 
   const counts = useMemo(
     () => ({
@@ -275,6 +375,186 @@ export const DevicesScreen: React.FC<DevicesScreenProps> = ({
           </p>
         </div>
       )}
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section
+          aria-labelledby="support-links-heading"
+          className="rounded-xl border border-[#DADDD8] bg-white p-5 shadow-xs"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 id="support-links-heading" className="text-base font-semibold text-[#14181B]">
+                15-Minute One-Time Support Links
+              </h2>
+              <p className="mt-0.5 text-xs text-[#4A524E]">
+                Single-use links expire after 15 minutes and stay bound to the enrolled server domain.
+              </p>
+            </div>
+            {devices[0] && (
+              <button
+                type="button"
+                onClick={() => handleIssue15MinLink(devices[0]!)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[#0F7B6C] bg-[#E3F1EE] px-3 py-1.5 text-xs font-semibold text-[#074A40] hover:bg-[#D2E9E4] focus:outline-none focus:ring-2 focus:ring-[#0F7B6C]"
+              >
+                <Link2 className="h-3.5 w-3.5" aria-hidden="true" />
+                Issue 15-min link
+              </button>
+            )}
+          </div>
+
+          {linkStatusMessage && (
+            <p role="status" className="mt-3 rounded-lg bg-[#E3F1EE] px-3 py-2 text-xs font-medium text-[#074A40]">
+              {linkStatusMessage}
+            </p>
+          )}
+          {linkErrorMessage && (
+            <p role="alert" className="mt-3 rounded-lg bg-[#FEE4E2] px-3 py-2 text-xs font-medium text-[#912018]">
+              {linkErrorMessage}
+            </p>
+          )}
+
+          {supportLinks.length > 0 && (
+            <div className="mt-3 space-y-2.5">
+              <div>
+                <label htmlFor="support-link-domain-check" className="block text-xs font-medium text-[#4A524E]">
+                  Enrolled server domain check
+                </label>
+                <input
+                  id="support-link-domain-check"
+                  type="text"
+                  value={linkVerifyDomain}
+                  onChange={(e) => setLinkVerifyDomain(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-[#DADDD8] bg-white px-2.5 py-1.5 font-mono-code text-xs text-[#14181B]"
+                />
+              </div>
+              {supportLinks.map((link) => (
+                <div
+                  key={link.linkId}
+                  className="rounded-lg border border-[#DADDD8] bg-[#F5F6F4] p-3 text-xs"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold text-[#14181B]">{link.deviceAlias}</span>
+                    <span className="inline-flex items-center gap-1 rounded bg-[#E3F1EE] px-2 py-0.5 font-mono-code text-[11px] font-semibold text-[#074A40]">
+                      <Clock className="h-3 w-3" aria-hidden="true" />
+                      {link.redeemed ? "Redeemed" : "15:00 max"}
+                    </span>
+                  </div>
+                  <p className="mt-1 break-all font-mono-code text-[11px] text-[#4A524E]">
+                    {link.supportUrl}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleRedeemLink(link, 0)}
+                      className="rounded-md bg-[#0F7B6C] px-2.5 py-1 text-xs font-medium text-white hover:bg-[#0A6457]"
+                    >
+                      Redeem link
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRedeemLink(link, SUPPORT_LINK_TTL_MS + 1000)}
+                      className="rounded-md border border-[#DADDD8] bg-white px-2.5 py-1 text-xs font-medium text-[#14181B] hover:bg-[#F5F6F4]"
+                    >
+                      Test &gt;15m expiry
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section
+          aria-labelledby="abuse-report-heading"
+          className="rounded-xl border border-[#DADDD8] bg-white p-5 shadow-xs"
+        >
+          <div className="flex items-center gap-2">
+            <ShieldBan className="h-4 w-4 text-[#B42318]" aria-hidden="true" />
+            <h2 id="abuse-report-heading" className="text-base font-semibold text-[#14181B]">
+              Block Requester &amp; Report Abuse
+            </h2>
+          </div>
+          <p className="mt-0.5 text-xs text-[#4A524E]">
+            Automatic 15-minute lockout triggers after 3 denials/mismatches. Block and report suspected scam callers immediately.
+          </p>
+
+          <form onSubmit={handleSubmitAbuse} className="mt-3 space-y-2.5 text-xs">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div>
+                <label htmlFor="abuse-device-select" className="block font-medium text-[#4A524E]">
+                  Target device
+                </label>
+                <select
+                  id="abuse-device-select"
+                  value={abuseDeviceId}
+                  onChange={(e) => setAbuseDeviceId(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-[#DADDD8] bg-white px-2.5 py-1.5 text-xs text-[#14181B]"
+                >
+                  {devices.map((d) => (
+                    <option key={d.deviceId} value={d.deviceId}>
+                      {d.alias}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="abuse-category-select" className="block font-medium text-[#4A524E]">
+                  Category
+                </label>
+                <select
+                  id="abuse-category-select"
+                  value={abuseCategory}
+                  onChange={(e) => setAbuseCategory(e.target.value as AbuseCategory)}
+                  className="mt-1 w-full rounded-lg border border-[#DADDD8] bg-white px-2.5 py-1.5 text-xs text-[#14181B]"
+                >
+                  <option value="scam_attempt">Scam attempt</option>
+                  <option value="impersonation">Impersonation</option>
+                  <option value="harassment">Repeated unwanted requests</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label htmlFor="abuse-requester-input" className="block font-medium text-[#4A524E]">
+                Requester identity or key
+              </label>
+              <input
+                id="abuse-requester-input"
+                type="text"
+                value={abuseRequester}
+                onChange={(e) => setAbuseRequester(e.target.value)}
+                placeholder="caller@untrusted.example"
+                className="mt-1 w-full rounded-lg border border-[#DADDD8] bg-white px-2.5 py-1.5 text-xs text-[#14181B]"
+              />
+            </div>
+            <div>
+              <label htmlFor="abuse-summary-input" className="block font-medium text-[#4A524E]">
+                Incident summary (metadata only)
+              </label>
+              <input
+                id="abuse-summary-input"
+                type="text"
+                value={abuseSummary}
+                onChange={(e) => setAbuseSummary(e.target.value)}
+                placeholder="Claimed to be bank fraud support"
+                className="mt-1 w-full rounded-lg border border-[#DADDD8] bg-white px-2.5 py-1.5 text-xs text-[#14181B]"
+              />
+            </div>
+            <button
+              type="submit"
+              className="w-full rounded-lg bg-[#B42318] px-3 py-2 text-xs font-semibold text-white hover:bg-[#912018]"
+            >
+              Block &amp; submit abuse report
+            </button>
+          </form>
+
+          {abuseConfirmation && (
+            <p role="status" className="mt-3 rounded-lg bg-[#FEE4E2] px-3 py-2 text-xs font-medium text-[#912018]">
+              {abuseConfirmation}
+            </p>
+          )}
+        </section>
+      </div>
     </section>
   );
 };

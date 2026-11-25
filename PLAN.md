@@ -69,7 +69,7 @@ git init -b main
   - Implement directional text clipboard sync and chunked WebRTC data-channel file transfer (off by default, size/type limits, mid-transfer cancel, filename/size metadata logged).
   - **Exit Gate:** Tests verify frames fail closed whenever unchecked in `SessionGrant`.
 
-- [ ] **Issue `#10`: Anti-Abuse Controls & 15-Minute Support Links**
+- [x] **Issue `#10`: Anti-Abuse Controls & 15-Minute Support Links**
   - Implement 15-minute expiring one-time support links bound to enrolled server identity, requester cooldowns after 3 denials/mismatches, and host-side Block/Report actions.
   - **Exit Gate:** Expired links (>15m) rejected; repeated denials trigger automatic lockout.
 

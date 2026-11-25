@@ -13,6 +13,7 @@ export interface HostBridge {
   presentIncomingRequest(payload: IncomingConnectionPayload): Promise<HostSnapshot>;
   allowSession(permissions: HostPermissionSelection, duration: GrantDuration): Promise<HostSnapshot>;
   denySession(): Promise<HostSnapshot>;
+  blockAndReportPending?(category: string, summary: string): Promise<HostSnapshot>;
   updateActivePermissions(permissions: HostPermissionSelection): Promise<HostSnapshot>;
   endActiveSessionLocal(): Promise<HostSnapshot>;
   subscribe(listener: (snapshot: HostSnapshot) => void): Promise<() => void>;
@@ -35,6 +36,10 @@ export function createTauriHostBridge(): HostBridge {
     allowSession: (permissions, duration) =>
       invoke<HostSnapshot>("allow_session", { payload: { permissions, duration } }),
     denySession: () => invoke<HostSnapshot>("deny_session"),
+    blockAndReportPending: (category, summary) =>
+      invoke<HostSnapshot>("block_and_report_pending_requester", {
+        payload: { category, summary },
+      }),
     updateActivePermissions: (permissions) =>
       invoke<HostSnapshot>("update_active_permissions", { permissions }),
     endActiveSessionLocal: () => invoke<HostSnapshot>("end_active_session_local"),

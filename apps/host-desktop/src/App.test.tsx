@@ -112,6 +112,16 @@ function makeMemoryBridge(initial: HostSnapshot): {
       };
       return snap;
     },
+    blockAndReportPending: async (_category, _summary) => {
+      snap = {
+        ...snap,
+        tray_state: "alert",
+        consent_state_name: "DENIED_LOGGED",
+        pending_request: null,
+        alert_message: "Requester blocked on this device.",
+      };
+      return snap;
+    },
     updateActivePermissions: async (permissions) => {
       if (snap.active_banner) {
         snap = {
@@ -318,6 +328,18 @@ describe("Oudos host-desktop Consent UI, Banner & Tray", () => {
     expect(container.querySelector('[data-testid="tray-center-dot"]')).toBeInTheDocument();
     expect(container.querySelector('[data-testid="tray-alert-mark"]')).toBeInTheDocument();
 
+    await expectZeroAxeViolations(container);
+  });
+
+  it("supports host-side Block & report requester on the consent card", async () => {
+    const initial = makePendingSnapshot();
+    const { bridge } = makeMemoryBridge(initial);
+    const { container } = render(<App bridge={bridge} initialSnapshot={initial} />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Block & report requester/i }));
+    });
+    expect(screen.getByText(/Requester blocked on this device/i)).toBeInTheDocument();
     await expectZeroAxeViolations(container);
   });
 });

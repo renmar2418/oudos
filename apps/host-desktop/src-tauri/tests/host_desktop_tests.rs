@@ -7,9 +7,9 @@ use oud_capture::{
     Rect,
 };
 use oud_host_desktop::host_state::{
-    decide_window_close_action, sanitize_requester_name, validate_server_domain, HostDesktopState,
-    HostPermissionSelection, IncomingRequestParams, InputOrigin, WindowCloseAction,
-    MAX_REQUESTER_NAME_CHARS,
+    decide_window_close_action, sanitize_requester_name, validate_server_domain,
+    validate_support_link_window, HostAbuseReportParams, HostDesktopState, HostPermissionSelection,
+    IncomingRequestParams, InputOrigin, WindowCloseAction, MAX_REQUESTER_NAME_CHARS,
 };
 use oud_host_desktop::tray::{
     encode_rgba_ico_32, encode_rgba_png, render_monochrome_brackets_rgba, render_tray_rgba,
@@ -525,4 +525,111 @@ fn host_opt_in_file_transfer_enforces_limits_and_logs_metadata_only() {
         AuditEventKind::FileTransferMetadata { ref filename, size_bytes }
         if filename == "invoice.pdf" && size_bytes == payload.len() as u64
     )));
+}
+
+#[test]
+fn three_denials_trigger_automatic_lockout_and_block_report_persists() {
+    let t0 = Utc::now();
+    let host_keys = IdentityKeyPair::generate();
+    let host_pubkey = host_keys.public_key();
+    let mut state = HostDesktopState::with_default_policy(host_keys);
+
+    let make_req = || IncomingRequestParams {
+        session_id: Uuid::now_v7(),
+        requester_name: "Caller".to_owned(),
+        viewer_keys: IdentityKeyPair::from_seed([0x42; 32]),
+        server_domain: "support.example.org".to_owned(),
+        server_enrolled: true,
+        host_key_matches_pin: true,
+        authenticated_requester: true,
+        rate_limit_passed: true,
+        first_time_requester: false,
+        requested_permissions: HostPermissionSelection::default(),
+    };
+
+    for i in 0..3 {
+        let now = t0 + Duration::seconds(i * 10);
+        state
+            .receive_incoming_request(&make_req(), now)
+            .expect("request allowed before lockout");
+        state
+            .deny_session(now + Duration::seconds(1))
+            .expect("deny");
+    }
+
+    // 4th attempt within 15-minute cooldown fails closed with RateLimitLockedOut.
+    let locked = state.receive_incoming_request(&make_req(), t0 + Duration::seconds(40));
+    assert!(matches!(
+        locked,
+        Err(CaptureError::GrantError(ProtocolError::RateLimitLockedOut))
+    ));
+    assert_eq!(
+        state.snapshot(t0 + Duration::seconds(40)).tray_state,
+        TrayVisualState::Alert
+    );
+
+    // Explicit block + abuse report permanently blocks another requester even after cooldown.
+    let scammer_seed = [0x99; 32];
+    let scammer_pk = IdentityKeyPair::from_seed(scammer_seed).public_key();
+    state
+        .receive_incoming_request(
+            &IncomingRequestParams {
+                session_id: Uuid::now_v7(),
+                requester_name: "Fake Support".to_owned(),
+                viewer_keys: IdentityKeyPair::from_seed(scammer_seed),
+                server_domain: "support.example.org".to_owned(),
+                server_enrolled: true,
+                host_key_matches_pin: true,
+                authenticated_requester: true,
+                rate_limit_passed: true,
+                first_time_requester: true,
+                requested_permissions: HostPermissionSelection::default(),
+            },
+            t0 + Duration::seconds(50),
+        )
+        .expect("scammer prompt");
+
+    let report = state
+        .report_abuse(
+            InputOrigin::LocalHost,
+            HostAbuseReportParams {
+                requester_pubkey: scammer_pk,
+                server_domain: "support.example.org",
+                category: "scam_attempt",
+                summary: "Impersonated bank fraud desk",
+                also_block: true,
+            },
+            t0 + Duration::seconds(52),
+        )
+        .expect("report abuse");
+    assert!(report.blocked);
+    assert_eq!(state.abuse_reports().len(), 1);
+    assert!(state.is_requester_blocked_or_locked(&scammer_pk, t0 + Duration::hours(24)));
+
+    // 15-minute support link validator rejects >15m expiry and wrong server domain.
+    assert!(validate_support_link_window(
+        t0,
+        t0 + Duration::minutes(15),
+        "support.example.org",
+        "support.example.org",
+        t0 + Duration::minutes(14),
+    )
+    .is_ok());
+    assert!(validate_support_link_window(
+        t0,
+        t0 + Duration::minutes(15),
+        "support.example.org",
+        "support.example.org",
+        t0 + Duration::minutes(15) + Duration::seconds(1),
+    )
+    .is_err());
+    assert!(validate_support_link_window(
+        t0,
+        t0 + Duration::minutes(15),
+        "evil.example.org",
+        "support.example.org",
+        t0 + Duration::minutes(1),
+    )
+    .is_err());
+    assert!(verify_chain(state.audit_chain().entries(), &host_pubkey).is_ok());
 }

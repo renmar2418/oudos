@@ -7,6 +7,8 @@
 //! - Local-only `End session` grant revocation (`HostFrameGatekeeper::revoke()`).
 //! - Protected consent/banner surface rect blocking + synthetic input audit logging.
 
+use std::collections::{HashMap, HashSet};
+
 use chrono::{DateTime, Duration, Utc};
 use oud_capture::{
     CaptureError, ClipboardAuditMetadata, ClipboardEndpoint, ClipboardSyncManager,
@@ -19,8 +21,8 @@ use oud_protocol::grant::{ClipboardDirection, GrantDuration, GrantPermissions, S
 use oud_protocol::handshake::{InitiatorPending, ResponderPending};
 use oud_protocol::identity::{IdentityKeyPair, IdentityPublicKey};
 use oud_protocol::state_machine::{
-    ConsentEvent, ConsentMachine, ConsentState, DenialReason, RevocationReason, CONSENT_TTL_SECS,
-    COOLING_OFF_SECS,
+    BlockedReason, ConsentEvent, ConsentMachine, ConsentState, DenialReason, RevocationReason,
+    CONSENT_TTL_SECS, COOLING_OFF_SECS,
 };
 use oud_protocol::ProtocolError;
 use serde::{Deserialize, Serialize};
@@ -36,6 +38,44 @@ pub const CONSENT_CARD_HEIGHT: u32 = 660;
 pub const MAX_REQUESTER_NAME_CHARS: usize = 48;
 /// Maximum ASCII length for a validated `server_domain` hostname.
 pub const MAX_SERVER_DOMAIN_CHARS: usize = 253;
+/// Maximum consecutive denials/SAS mismatches before automatic host cooldown lockout.
+pub const HOST_MAX_DENIAL_STREAK: u8 = 3;
+/// Automatic host cooldown lockout duration in seconds (15 minutes).
+pub const HOST_LOCKOUT_DURATION_SECS: i64 = 900;
+/// Hard maximum lifetime in seconds for one-time support links (15 minutes).
+pub const SUPPORT_LINK_MAX_TTL_SECS: i64 = 900;
+
+/// Input parameters for recording a local host abuse report.
+#[derive(Debug, Clone, Copy)]
+pub struct HostAbuseReportParams<'a> {
+    /// Offending requester Ed25519 public key.
+    pub requester_pubkey: IdentityPublicKey,
+    /// Raw server domain.
+    pub server_domain: &'a str,
+    /// Abuse category (`"impersonation"`, `"harassment"`, `"scam_attempt"`, `"other"`).
+    pub category: &'a str,
+    /// Plain-text incident summary (metadata only).
+    pub summary: &'a str,
+    /// Whether to automatically block the requester on this host.
+    pub also_block: bool,
+}
+
+/// Host-side metadata-only abuse report record.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HostAbuseReport {
+    /// Report identifier (`UUIDv7`).
+    pub report_id: String,
+    /// Offending requester Ed25519 public key.
+    pub requester_pubkey: String,
+    /// Abuse category (`"impersonation"`, `"harassment"`, `"scam_attempt"`, `"other"`).
+    pub category: String,
+    /// Plain-text summary (no secrets/payloads).
+    pub summary: String,
+    /// Whether the requester was also blocked.
+    pub blocked: bool,
+    /// UTC creation timestamp.
+    pub created_at_utc: String,
+}
 
 /// Window close policy evaluated when the OS requests closing `"banner"` or `"consent"`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -285,6 +325,9 @@ pub struct HostDesktopState {
     protected_surfaces: ProtectedSurfaceRegistry,
     clipboard_manager: ClipboardSyncManager,
     file_transfer_manager: FileTransferManager,
+    blocked_requesters: HashSet<IdentityPublicKey>,
+    denial_streaks: HashMap<IdentityPublicKey, (u8, Option<DateTime<Utc>>)>,
+    abuse_reports: Vec<HostAbuseReport>,
     audit_chain: AuditChain,
     pending: Option<PendingSessionInternal>,
     active: Option<ActiveSessionInternal>,
@@ -317,6 +360,9 @@ impl HostDesktopState {
                 ft_limits,
                 std::sync::Arc::new(oud_capture::NoopFileScanHook),
             ),
+            blocked_requesters: HashSet::new(),
+            denial_streaks: HashMap::new(),
+            abuse_reports: Vec::new(),
             audit_chain: AuditChain::new(),
             pending: None,
             active: None,
@@ -401,13 +447,15 @@ impl HostDesktopState {
             }
         };
 
+        let requester_allowed =
+            params.rate_limit_passed && !self.is_requester_blocked_or_locked(&viewer_pubkey, now);
         let req_res = self.consent_machine.apply(ConsentEvent::RequestIncoming {
             session_id: params.session_id,
             viewer_pubkey,
             server_domain: server_domain.clone(),
             authenticated_requester: params.authenticated_requester,
             server_enrolled: params.server_enrolled,
-            rate_limit_passed: params.rate_limit_passed,
+            rate_limit_passed: requester_allowed,
             host_key_matches_pin: params.host_key_matches_pin,
             first_time_requester: params.first_time_requester,
             now,
@@ -489,6 +537,12 @@ impl HostDesktopState {
             ConsentState::DeniedLogged(reason) => {
                 if prev_is_pending {
                     if let Some(p) = self.pending.take() {
+                        if matches!(
+                            reason,
+                            DenialReason::OwnerDenied | DenialReason::SasMismatch
+                        ) {
+                            self.record_requester_denial(p.viewer_pubkey, now);
+                        }
                         let _ = self.append_audit(
                             p.session_id,
                             p.viewer_pubkey,
@@ -625,6 +679,7 @@ impl HostDesktopState {
         });
         self.tray_state = TrayVisualState::InSession;
         self.alert_message = None;
+        self.denial_streaks.remove(&pending.viewer_pubkey);
 
         let _ = self.append_audit(
             pending.session_id,
@@ -649,6 +704,7 @@ impl HostDesktopState {
             reason: DenialReason::OwnerDenied,
         })?;
         if let Some(p) = self.pending.take() {
+            self.record_requester_denial(p.viewer_pubkey, now);
             let _ = self.append_audit(
                 p.session_id,
                 p.viewer_pubkey,
@@ -663,6 +719,128 @@ impl HostDesktopState {
             .clear_surface(ProtectedSurfaceKind::ConsentPrompt);
         self.tray_state = TrayVisualState::Idle;
         Ok(self.snapshot(now))
+    }
+
+    /// Blocks a requester locally and optionally denies any pending request from them.
+    ///
+    /// # Errors
+    /// Fails closed if `origin != InputOrigin::LocalHost`.
+    pub fn block_requester(
+        &mut self,
+        origin: InputOrigin,
+        requester_pubkey: IdentityPublicKey,
+        server_domain: &str,
+        now: DateTime<Utc>,
+    ) -> Result<HostSnapshot, CaptureError> {
+        if origin != InputOrigin::LocalHost {
+            self.protected_surfaces.record_block(
+                ProtectedSurfaceKind::ConsentPrompt,
+                "remote_block_attempt",
+                now,
+            );
+            self.flush_pending_synthetic_audit();
+            return Err(CaptureError::ProtectedSurfaceInputBlocked {
+                surface: ProtectedSurfaceKind::ConsentPrompt.as_str(),
+                reason: "remote_block_attempt",
+            });
+        }
+        self.blocked_requesters.insert(requester_pubkey);
+        if self
+            .pending
+            .as_ref()
+            .is_some_and(|p| p.viewer_pubkey == requester_pubkey)
+        {
+            let _ = self.deny_session(now);
+        }
+        let _ = self.append_audit(
+            Uuid::nil(),
+            requester_pubkey,
+            server_domain,
+            AuditEventKind::BlockedSecurityAlert {
+                reason: BlockedReason::UnauthorizedOrRateLimited,
+            },
+            now,
+        );
+        self.alert_message = Some("Requester blocked on this device.".to_owned());
+        Ok(self.snapshot(now))
+    }
+
+    /// Records a local-only abuse report and blocks the offending requester when requested.
+    ///
+    /// # Errors
+    /// Fails closed if `origin != InputOrigin::LocalHost` or summary is empty.
+    pub fn report_abuse(
+        &mut self,
+        origin: InputOrigin,
+        params: HostAbuseReportParams<'_>,
+        now: DateTime<Utc>,
+    ) -> Result<HostAbuseReport, CaptureError> {
+        if origin != InputOrigin::LocalHost {
+            return Err(CaptureError::ProtectedSurfaceInputBlocked {
+                surface: ProtectedSurfaceKind::ConsentPrompt.as_str(),
+                reason: "remote_abuse_report_attempt",
+            });
+        }
+        let cleaned: String = params
+            .summary
+            .chars()
+            .filter(|c| !c.is_control())
+            .collect::<String>()
+            .trim()
+            .chars()
+            .take(500)
+            .collect();
+        if cleaned.is_empty() {
+            return Err(CaptureError::GrantError(ProtocolError::V01PolicyViolation(
+                "abuse report summary must not be empty",
+            )));
+        }
+        if params.also_block {
+            self.block_requester(origin, params.requester_pubkey, params.server_domain, now)?;
+        }
+        let report = HostAbuseReport {
+            report_id: Uuid::now_v7().to_string(),
+            requester_pubkey: params.requester_pubkey.to_prefixed_hex(),
+            category: params.category.trim().to_owned(),
+            summary: cleaned,
+            blocked: params.also_block,
+            created_at_utc: now.to_rfc3339(),
+        };
+        self.abuse_reports.push(report.clone());
+        Ok(report)
+    }
+
+    /// Returns all locally recorded abuse reports.
+    #[must_use]
+    pub fn abuse_reports(&self) -> &[HostAbuseReport] {
+        &self.abuse_reports
+    }
+
+    /// Returns whether `requester_pubkey` is explicitly blocked or in 15-minute cooldown lockout.
+    #[must_use]
+    pub fn is_requester_blocked_or_locked(
+        &self,
+        requester_pubkey: &IdentityPublicKey,
+        now: DateTime<Utc>,
+    ) -> bool {
+        if self.blocked_requesters.contains(requester_pubkey) {
+            return true;
+        }
+        self.denial_streaks
+            .get(requester_pubkey)
+            .and_then(|(_, locked_until)| *locked_until)
+            .is_some_and(|until| now < until)
+    }
+
+    fn record_requester_denial(&mut self, requester_pubkey: IdentityPublicKey, now: DateTime<Utc>) {
+        let entry = self
+            .denial_streaks
+            .entry(requester_pubkey)
+            .or_insert((0, None));
+        entry.0 = entry.0.saturating_add(1);
+        if entry.0 >= HOST_MAX_DENIAL_STREAK {
+            entry.1 = Some(now + Duration::seconds(HOST_LOCKOUT_DURATION_SECS));
+        }
     }
 
     /// Updates pending permission checkboxes or active session grant permissions immediately.
@@ -1028,6 +1206,14 @@ impl HostDesktopState {
         self.pending.is_some()
     }
 
+    /// Returns the pending requester's public key and bound server domain, if any.
+    #[must_use]
+    pub fn pending_requester_identity(&self) -> Option<(IdentityPublicKey, String)> {
+        self.pending
+            .as_ref()
+            .map(|p| (p.viewer_pubkey, p.server_domain.clone()))
+    }
+
     /// Returns whether an active remote session banner is currently mounted.
     #[must_use]
     pub const fn has_active_banner(&self) -> bool {
@@ -1282,6 +1468,32 @@ fn is_forbidden_identity_char(c: char) -> bool {
             c,
             '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}' | '\u{FEFF}'
         )
+}
+
+/// Validates that a 15-minute support link window has not expired and matches the enrolled server domain.
+///
+/// # Errors
+/// Returns [`CaptureError::GrantError`] if the server domain mismatches, TTL exceeds 15 minutes,
+/// or the link is already expired at `now`.
+pub fn validate_support_link_window(
+    created_at: DateTime<Utc>,
+    expires_at: DateTime<Utc>,
+    bound_server_domain: &str,
+    enrolled_server_domain: &str,
+    now: DateTime<Utc>,
+) -> Result<(), CaptureError> {
+    let bound = validate_server_domain(bound_server_domain)?;
+    let enrolled = validate_server_domain(enrolled_server_domain)?;
+    if bound != enrolled {
+        return Err(CaptureError::GrantError(ProtocolError::ServerNotEnrolled));
+    }
+    if expires_at <= created_at
+        || (expires_at - created_at).num_seconds() > SUPPORT_LINK_MAX_TTL_SECS
+        || now >= expires_at
+    {
+        return Err(CaptureError::GrantError(ProtocolError::ConsentTtlExpired));
+    }
+    Ok(())
 }
 
 /// Formats a 6-digit SAS string (`"739204"`) with a center space (`"739 204"`).

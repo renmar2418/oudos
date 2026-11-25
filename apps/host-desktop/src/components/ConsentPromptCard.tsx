@@ -13,6 +13,7 @@ interface ConsentPromptCardProps {
   errorMessage?: string | null;
   onAllow: (permissions: HostPermissionSelection, duration: GrantDuration) => void;
   onDeny: () => void;
+  onBlockAndReport?: (category: string, summary: string) => void;
 }
 
 function formatCountdown(secs: number): string {
@@ -28,6 +29,7 @@ export const ConsentPromptCard: React.FC<ConsentPromptCardProps> = ({
   errorMessage = null,
   onAllow,
   onDeny,
+  onBlockAndReport,
 }) => {
   const [permissions, setPermissions] = useState<HostPermissionSelection>({
     view_screen: true,
@@ -272,23 +274,40 @@ export const ConsentPromptCard: React.FC<ConsentPromptCardProps> = ({
         )}
       </div>
 
-      <div className="mt-4 flex gap-3 pt-2">
-        <button
-          type="button"
-          onClick={onDeny}
-          disabled={submitting}
-          className="flex-1 rounded-lg border border-[#B42318] bg-[#FEE4E2] px-4 py-2.5 text-sm font-semibold text-[#912018] hover:bg-[#FCD5D2] focus:outline-none focus:ring-2 focus:ring-[#B42318]"
-        >
-          Deny
-        </button>
-        <button
-          type="button"
-          onClick={() => onAllow(permissions, duration)}
-          disabled={allowBlocked}
-          className="flex-1 rounded-lg bg-[#0F7B6C] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#0A6457] focus:outline-none focus:ring-2 focus:ring-[#074A40] disabled:cursor-not-allowed disabled:bg-[#5C6560]"
-        >
-          {coolingRemaining > 0 ? `Allow (${coolingRemaining}s)` : "Allow"}
-        </button>
+      <div className="mt-4 space-y-2 pt-2">
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={onDeny}
+            disabled={submitting}
+            className="flex-1 rounded-lg border border-[#B42318] bg-[#FEE4E2] px-4 py-2.5 text-sm font-semibold text-[#912018] hover:bg-[#FCD5D2] focus:outline-none focus:ring-2 focus:ring-[#B42318]"
+          >
+            Deny
+          </button>
+          <button
+            type="button"
+            onClick={() => onAllow(permissions, duration)}
+            disabled={allowBlocked}
+            className="flex-1 rounded-lg bg-[#0F7B6C] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#0A6457] focus:outline-none focus:ring-2 focus:ring-[#074A40] disabled:cursor-not-allowed disabled:bg-[#5C6560]"
+          >
+            {coolingRemaining > 0 ? `Allow (${coolingRemaining}s)` : "Allow"}
+          </button>
+        </div>
+        {onBlockAndReport && (
+          <button
+            type="button"
+            disabled={submitting}
+            onClick={() =>
+              onBlockAndReport(
+                "scam_attempt",
+                "Blocked & reported from host consent prompt"
+              )
+            }
+            className="w-full rounded-lg border border-[#DADDD8] bg-white px-3 py-1.5 text-xs font-medium text-[#912018] hover:bg-[#FEE4E2]/40 focus:outline-none focus:ring-2 focus:ring-[#B42318]"
+          >
+            Block &amp; report requester
+          </button>
+        )}
       </div>
     </main>
   );

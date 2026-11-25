@@ -19,8 +19,8 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State};
 use uuid::Uuid;
 
 use crate::host_state::{
-    decide_window_close_action, HostDesktopState, HostPermissionSelection, HostSnapshot,
-    IncomingRequestParams, InputOrigin, WindowCloseAction,
+    decide_window_close_action, HostAbuseReportParams, HostDesktopState, HostPermissionSelection,
+    HostSnapshot, IncomingRequestParams, InputOrigin, WindowCloseAction,
 };
 use crate::tray::{render_tray_rgba, TrayVisualState};
 
@@ -187,6 +187,48 @@ fn deny_session(
             .lock()
             .map_err(|_| "host state lock poisoned".to_owned())?;
         guard.deny_session(Utc::now()).map_err(|e| e.to_string())?
+    };
+    sync_windows_and_tray(&app, &state, &tray_ui, &snap);
+    Ok(snap)
+}
+
+#[derive(Debug, Deserialize)]
+struct BlockReportPayload {
+    category: String,
+    summary: String,
+}
+
+#[allow(clippy::needless_pass_by_value)]
+#[tauri::command]
+fn block_and_report_pending_requester(
+    app: AppHandle,
+    state: State<'_, SharedHostState>,
+    tray_ui: State<'_, Mutex<TrayUiHandle>>,
+    payload: BlockReportPayload,
+) -> Result<HostSnapshot, String> {
+    let snap = {
+        let mut guard = state
+            .inner
+            .lock()
+            .map_err(|_| "host state lock poisoned".to_owned())?;
+        let (pubkey, domain) = guard
+            .pending_requester_identity()
+            .ok_or_else(|| "no pending request to block/report".to_owned())?;
+        let now = Utc::now();
+        guard
+            .report_abuse(
+                InputOrigin::LocalHost,
+                HostAbuseReportParams {
+                    requester_pubkey: pubkey,
+                    server_domain: &domain,
+                    category: &payload.category,
+                    summary: &payload.summary,
+                    also_block: true,
+                },
+                now,
+            )
+            .map_err(|e| e.to_string())?;
+        guard.snapshot(now)
     };
     sync_windows_and_tray(&app, &state, &tray_ui, &snap);
     Ok(snap)
@@ -512,6 +554,7 @@ pub fn run() {
             present_incoming_request,
             allow_session,
             deny_session,
+            block_and_report_pending_requester,
             update_active_permissions,
             end_active_session_local,
             register_protected_window_rect

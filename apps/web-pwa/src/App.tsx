@@ -628,6 +628,29 @@ export const App: React.FC<AppProps> = ({
             onConnect={startConnectionFlow}
             onOpenAddDevice={() => setIsAddDeviceOpen(true)}
             onToggleNotify={handleToggleNotify}
+            onCreateSupportLink={(link) => {
+              const dev =
+                devices.find((d) => d.deviceId === link.deviceId) ?? selectedDevice;
+              appendAuditEntry(
+                dev,
+                link.linkId,
+                `SupportLinkIssued (15m TTL, ${link.serverDomain})`
+              );
+            }}
+            onRedeemSupportLink={(linkId) => {
+              appendAuditEntry(
+                selectedDevice,
+                linkId,
+                `SupportLinkRedeemed (${selectedDevice.serverDomain})`
+              );
+            }}
+            onBlockAndReport={(device, requester, category) => {
+              appendAuditEntry(
+                device,
+                nextSessionId(),
+                `AbuseReported & RequesterBlocked (${category}: ${requester})`
+              );
+            }}
           />
         )}
 

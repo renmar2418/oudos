@@ -7,13 +7,14 @@ pub mod db;
 pub mod error;
 pub mod rate_limit;
 pub mod signaling;
+pub mod support_links;
 
 use std::sync::Arc;
 
 use axum::extract::{Path, State};
-use axum::routing::{get, post, put};
+use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use oud_policy::{merge_policies_strict, EffectivePolicy, PolicyLayer, PolicyScope};
 use oud_protocol::identity::{DeviceId, IdentityKeyPair, IdentityPublicKey, IdentitySignature};
 use oud_protocol::PROTOCOL_VERSION;
@@ -37,6 +38,8 @@ pub struct AppState {
     pub server_domain: String,
     /// WebSocket signaling hub.
     pub signaling: Arc<SignalingHub>,
+    /// UTC clock source (defaults to `Utc::now`; injectable for deterministic expiry tests).
+    pub clock: Arc<dyn Fn() -> DateTime<Utc> + Send + Sync>,
 }
 
 impl AppState {
@@ -49,12 +52,26 @@ impl AppState {
         server_domain: impl Into<String>,
         server_keypair: IdentityKeyPair,
     ) -> Result<Self, ServerError> {
+        Self::with_clock(db_path, server_domain, server_keypair, Arc::new(Utc::now))
+    }
+
+    /// Creates a new [`AppState`] with an injectable UTC clock.
+    ///
+    /// # Errors
+    /// Returns [`ServerError::Internal`] if SQLite initialization fails.
+    pub fn with_clock(
+        db_path: &str,
+        server_domain: impl Into<String>,
+        server_keypair: IdentityKeyPair,
+        clock: Arc<dyn Fn() -> DateTime<Utc> + Send + Sync>,
+    ) -> Result<Self, ServerError> {
         let db = Arc::new(Database::open(db_path)?);
         Ok(Self {
             db,
             server_keypair: Arc::new(server_keypair),
             server_domain: server_domain.into(),
             signaling: Arc::new(SignalingHub::default()),
+            clock,
         })
     }
 }
@@ -70,6 +87,34 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/devices/enroll", post(enroll_device))
         .route("/api/v1/devices", get(list_devices))
         .route("/api/v1/devices/:device_id/presence", post(update_presence))
+        .route(
+            "/api/v1/devices/:device_id/block",
+            post(support_links::block_requester_handler),
+        )
+        .route(
+            "/api/v1/devices/:device_id/block/:requester_pubkey",
+            delete(support_links::unblock_requester_handler),
+        )
+        .route(
+            "/api/v1/devices/:device_id/blocks",
+            get(support_links::list_blocked_requesters_handler),
+        )
+        .route(
+            "/api/v1/support-links",
+            post(support_links::create_support_link),
+        )
+        .route(
+            "/api/v1/support-links/redeem",
+            post(support_links::redeem_support_link),
+        )
+        .route(
+            "/api/v1/abuse/report",
+            post(support_links::submit_abuse_report),
+        )
+        .route(
+            "/api/v1/abuse/reports",
+            get(support_links::list_abuse_reports),
+        )
         .route("/api/v1/sessions/request", post(request_session))
         .route("/api/v1/sessions/:device_id/outcome", post(record_outcome))
         .route("/api/v1/policies/:device_id", get(get_effective_policy))
@@ -355,7 +400,12 @@ async fn request_session(
     let device_id_str = req.device_id.as_compact().to_string();
     let requester_key = user.passkey_pubkey.to_prefixed_hex();
 
-    rate_limit::check_and_record_request(&state.db, &requester_key, &device_id_str, Utc::now())?;
+    rate_limit::check_and_record_request(
+        &state.db,
+        &requester_key,
+        &device_id_str,
+        (state.clock)(),
+    )?;
 
     let pk_str: String = state.db.with_conn(|conn| {
         conn.query_row(
@@ -427,7 +477,7 @@ async fn record_outcome(
                 &state.db,
                 &requester_key,
                 dev_str,
-                Utc::now(),
+                (state.clock)(),
             )?;
             Ok(Json(SessionOutcomeResponse {
                 denial_streak: streak,
