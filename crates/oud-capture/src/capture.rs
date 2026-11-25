@@ -2,6 +2,8 @@
 
 use std::time::Instant;
 
+use serde::{Deserialize, Serialize};
+
 use crate::error::CaptureError;
 use crate::CaptureBackend;
 
@@ -14,8 +16,8 @@ pub enum PixelFormat {
     Rgba8,
 }
 
-/// Dirty display region updated since the previous frame.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Screen or dirty display region in pixel coordinates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Rect {
     /// Left coordinate in pixels.
     pub x: i32,

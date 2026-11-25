@@ -10,11 +10,12 @@ use std::time::{Duration, Instant};
 use chrono::{Duration as ChronoDuration, Utc};
 use oud_capture::{
     discover_hardware_h264_adapters, AdaptiveH264Pipeline, CaptureError, EncodedVideoFrame,
-    EncoderKind, HostFrameGatekeeper, HostInboundMessage, HostMediaPeer, IceConfig, QualityPreset,
-    RawFrame, ScreenCapturer, SessionTelemetry, SignedSdpDescription, SoftwareH264Encoder,
-    SyntheticFrameCapturer, TransportMode, TurnFallbackConfig, VerifiedPeerContext, VideoEncoder,
-    ViewerMediaPeer,
+    EncoderKind, HostFrameGatekeeper, HostInboundMessage, HostMediaPeer, IceConfig,
+    ProtectedSurfaceKind, QualityPreset, RawFrame, Rect, ScreenCapturer, SessionTelemetry,
+    SignedSdpDescription, SoftwareH264Encoder, SyntheticFrameCapturer, TransportMode,
+    TurnFallbackConfig, VerifiedPeerContext, VideoEncoder, ViewerMediaPeer,
 };
+use oud_protocol::audit::{verify_chain, AuditChain, AuditEventKind};
 use oud_protocol::grant::{FrameKind, GrantDuration, GrantPermissions, SessionGrant};
 use oud_protocol::handshake::{InitiatorPending, ResponderPending};
 use oud_protocol::identity::IdentityKeyPair;
@@ -751,4 +752,175 @@ async fn malformed_inbound_payload_increments_rejected_counters() {
     );
 
     host.close().await.expect("close host");
+}
+
+async fn setup_protected_loopback_peers(
+    host_keys: &IdentityKeyPair,
+    viewer_keys: &IdentityKeyPair,
+    session_id: Uuid,
+) -> (HostMediaPeer, ViewerMediaPeer) {
+    let now = Utc::now();
+    let (host_ctx, viewer_ctx) =
+        perform_authenticated_handshake(host_keys, viewer_keys, session_id);
+    let grant = SessionGrant::issue(
+        host_keys,
+        session_id,
+        viewer_keys.public_key(),
+        "support.example.org",
+        GrantPermissions {
+            view_screen: true,
+            mouse_keyboard: true,
+            clipboard_sync: false,
+            file_transfer: false,
+            blank_screen: false,
+        },
+        GrantDuration::ThisSession,
+        now,
+    )
+    .expect("grant");
+    let gk = HostFrameGatekeeper::from_verified_grant(
+        grant,
+        host_keys.public_key(),
+        session_id,
+        viewer_keys.public_key(),
+        "support.example.org",
+        now,
+    )
+    .expect("gatekeeper");
+    let ice = IceConfig::local_loopback();
+    let host = Box::pin(HostMediaPeer::new(
+        &ice,
+        gk,
+        AdaptiveH264Pipeline::new(QualityPreset::Auto).expect("pipeline"),
+        host_ctx,
+    ))
+    .await
+    .expect("host");
+    let viewer = Box::pin(ViewerMediaPeer::new(&ice, viewer_ctx))
+        .await
+        .expect("viewer");
+
+    host.protected_surfaces().set_surface(
+        ProtectedSurfaceKind::ConsentPrompt,
+        Rect {
+            x: 400,
+            y: 120,
+            width: 520,
+            height: 660,
+        },
+        None,
+    );
+    host.protected_surfaces().set_surface(
+        ProtectedSurfaceKind::SessionBanner,
+        Rect {
+            x: 500,
+            y: 12,
+            width: 460,
+            height: 44,
+        },
+        None,
+    );
+    connect_loopback_peers(&host, &viewer, host_keys, viewer_keys).await;
+    (host, viewer)
+}
+
+#[tokio::test]
+async fn remote_pointer_cannot_click_consent_allow_or_dismiss_banner_over_webrtc() {
+    let host_keys = IdentityKeyPair::generate();
+    let viewer_keys = IdentityKeyPair::generate();
+    let session_id = Uuid::now_v7();
+    let (host, viewer) = setup_protected_loopback_peers(&host_keys, &viewer_keys, session_id).await;
+
+    // 1. Remote click targeting Allow button inside 520x660 consent card -> blocked
+    viewer
+        .send_input_message(&HostInboundMessage::PointerAction {
+            seq: 10,
+            action: "click".to_owned(),
+            x: 780,
+            y: 730,
+        })
+        .await
+        .expect("send consent click");
+
+    // 2. Remote click targeting End session button inside top-most banner -> blocked
+    viewer
+        .send_input_message(&HostInboundMessage::PointerAction {
+            seq: 11,
+            action: "click".to_owned(),
+            x: 910,
+            y: 34,
+        })
+        .await
+        .expect("send banner click");
+
+    // 3. Unchecked clipboard & file transfer frames -> dropped at protocol gatekeeper
+    viewer
+        .send_input_message(&HostInboundMessage::ClipboardText {
+            text: "secret".to_owned(),
+        })
+        .await
+        .expect("send unchecked clipboard");
+    viewer
+        .send_input_message(&HostInboundMessage::FileChunk {
+            transfer_id: "t-1".to_owned(),
+            bytes_len: 128,
+        })
+        .await
+        .expect("send unchecked file chunk");
+
+    // 4. Remote click outside protected rects -> allowed through
+    viewer
+        .send_input_message(&HostInboundMessage::PointerAction {
+            seq: 12,
+            action: "click".to_owned(),
+            x: 120,
+            y: 120,
+        })
+        .await
+        .expect("send safe desktop click");
+
+    let deadline = Instant::now() + Duration::from_secs(3);
+    loop {
+        let authorized = host.drain_authorized_inputs().await;
+        if !authorized.is_empty() && host.protected_surfaces().total_blocked() >= 2 {
+            assert_eq!(
+                authorized,
+                vec![HostInboundMessage::PointerAction {
+                    seq: 12,
+                    action: "click".to_owned(),
+                    x: 120,
+                    y: 120,
+                }]
+            );
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "expected safe pointer delivery and protected-rect rejections"
+        );
+        sleep(Duration::from_millis(15)).await;
+    }
+
+    assert!(host.gatekeeper().lock().await.dropped_frames() >= 4);
+
+    let mut audit_chain = AuditChain::new();
+    let logged = host
+        .protected_surfaces()
+        .flush_to_audit_chain(
+            &mut audit_chain,
+            &host_keys,
+            session_id,
+            viewer_keys.public_key(),
+            "support.example.org",
+        )
+        .expect("flush audit chain");
+    assert_eq!(logged, 2);
+    assert!(verify_chain(audit_chain.entries(), &host_keys.public_key()).is_ok());
+    assert!(audit_chain
+        .entries()
+        .iter()
+        .all(|e| matches!(e.event.kind, AuditEventKind::SyntheticInputBlocked { .. })));
+
+    host.close().await.expect("close host");
+    viewer.close().await.expect("close viewer");
 }

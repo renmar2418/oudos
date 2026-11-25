@@ -5,6 +5,7 @@ build/
 .vite/
 test-results/
 playwright-report/
+apps/host-desktop/src-tauri/gen/
 
 # Dependencies
 node_modules/

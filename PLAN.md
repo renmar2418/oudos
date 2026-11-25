@@ -60,7 +60,7 @@ git init -b main
   - Implement `oud-capture` on Windows (Desktop Duplication / Windows Graphics Capture + hardware H.264 with software fallback) + WebRTC P2P (`webrtc-rs`) + Cloudflare free TURN / `coturn` fallback + Auto/Sharp/Fast quality presets.
   - **Exit Gate:** Same-region benchmark achieves p50 <= 80 ms latency, 1080p@30fps in Auto mode, and Allow-to-first-frame <= 3 s (p95).
 
-- [ ] **Issue `#8`: Protected Host Consent UI, Tray Icons & Persistent Banner**
+- [x] **Issue `#8`: Protected Host Consent UI, Tray Icons & Persistent Banner**
   - Build Tauri v2 host prompt (`520x660`) with raw enrolled server domain badge, 5s first-time anti-scam cooling-off timer, Screen-only default toggles, monochrome Facing-Brackets tray icons (Idle / In Session / Alert), and top-most `End session` banner.
   - Enforce `LLMHF_INJECTED` synthetic-input rejection and remote pointer rect blocking over consent/banner windows.
   - **Exit Gate:** Automated input-injection test confirms remote input cannot click `Allow` or dismiss the banner, and unchecked input/file frames are dropped locally at the protocol gatekeeper.

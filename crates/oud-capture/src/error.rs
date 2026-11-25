@@ -59,6 +59,15 @@ pub enum CaptureError {
         frame_kind: &'static str,
     },
 
+    /// Remote pointer or synthetic input targeted a protected consent/banner surface.
+    #[error("input blocked on protected surface `{surface}` ({reason})")]
+    ProtectedSurfaceInputBlocked {
+        /// Protected UI surface (`"consent_prompt"` or `"session_banner"`).
+        surface: &'static str,
+        /// Rejection mechanism (`"protected_rect"`, `"llmhf_injected"`, `"llkhf_injected"`).
+        reason: &'static str,
+    },
+
     /// Invalid STUN/TURN ICE server configuration.
     #[error("invalid ICE/TURN configuration: {0}")]
     InvalidIceConfig(String),

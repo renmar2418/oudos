@@ -51,6 +51,14 @@ pub enum AuditEventKind {
     },
     /// Metadata that a clipboard sync occurred (never clipboard text).
     ClipboardSyncEvent,
+    /// Blocked synthetic or protected-surface remote input attempt (metadata only;
+    /// never logs coordinates, keystrokes, or pointer payloads).
+    SyntheticInputBlocked {
+        /// Protected surface or boundary where input was blocked (`"consent_prompt"`, `"session_banner"`, `"win32_ll_hook"`).
+        surface: String,
+        /// Metadata reason category (`"llmhf_injected"`, `"llkhf_injected"`, `"protected_rect"`).
+        reason: String,
+    },
     /// Active session ended or revoked.
     SessionRevoked {
         /// Revocation reason.
@@ -343,5 +351,33 @@ mod tests {
             verify_chain(&tampered_payload, &host.public_key()),
             Err(ProtocolError::AuditChainBroken { index: 1, .. })
         ));
+    }
+
+    #[test]
+    fn synthetic_input_blocked_audit_event_chains_and_verifies() {
+        let host = IdentityKeyPair::generate();
+        let viewer = IdentityKeyPair::generate().public_key();
+        let session_id = Uuid::now_v7();
+        let mut chain = AuditChain::new();
+
+        chain
+            .append(
+                AuditEvent {
+                    event_id: Uuid::now_v7(),
+                    timestamp_utc: Utc::now(),
+                    session_id,
+                    device_pubkey: host.public_key(),
+                    actor_pubkey: viewer,
+                    server_domain: "support.example.org".to_owned(),
+                    kind: AuditEventKind::SyntheticInputBlocked {
+                        surface: "consent_prompt".to_owned(),
+                        reason: "llmhf_injected".to_owned(),
+                    },
+                },
+                &host,
+            )
+            .expect("append synthetic input blocked event");
+
+        assert!(chain.verify(&host.public_key()).is_ok());
     }
 }

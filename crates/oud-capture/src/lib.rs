@@ -6,6 +6,7 @@ pub mod encoder;
 pub mod error;
 pub mod gatekeeper;
 pub mod ice_config;
+pub mod input_isolation;
 pub mod preset;
 pub mod telemetry;
 pub mod webrtc_peer;
@@ -24,6 +25,12 @@ pub use encoder::{
 pub use error::{CaptureError, ScreenUnavailableReason};
 pub use gatekeeper::HostFrameGatekeeper;
 pub use ice_config::{IceConfig, TransportMode, TurnFallbackConfig, DEFAULT_STUN_URL};
+pub use input_isolation::{
+    is_synthetic_keyboard_flags, is_synthetic_mouse_flags, point_in_rect, ProtectedSurfaceKind,
+    ProtectedSurfaceRegistry, SyntheticBlockRecord,
+};
+#[cfg(target_os = "windows")]
+pub use input_isolation::{query_window_rect, WindowsInputGuard};
 pub use oud_protocol::PROTOCOL_VERSION;
 pub use preset::{EncodeProfile, QualityPreset};
 pub use telemetry::{SessionTelemetry, TelemetrySnapshot};

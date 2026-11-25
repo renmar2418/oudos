@@ -37,6 +37,7 @@ use crate::encoder::{AdaptiveH264Pipeline, EncodedVideoFrame};
 use crate::error::CaptureError;
 use crate::gatekeeper::HostFrameGatekeeper;
 use crate::ice_config::{IceConfig, TransportMode};
+use crate::input_isolation::ProtectedSurfaceRegistry;
 use crate::preset::QualityPreset;
 
 const DTLS_BINDING_DOMAIN: &[u8] = b"oudos-dtls-fp-v1";
@@ -193,6 +194,17 @@ pub enum HostInboundMessage {
         /// Event description (e.g. `"move"` or `"key"`).
         action: String,
     },
+    /// Remote pointer event carrying screen coordinates checked against protected host surfaces.
+    PointerAction {
+        /// Client monotonic sequence number.
+        seq: u64,
+        /// Pointer event kind (`"move"`, `"click"`, `"down"`, `"up"`).
+        action: String,
+        /// Target X coordinate in host screen pixels.
+        x: i32,
+        /// Target Y coordinate in host screen pixels.
+        y: i32,
+    },
     /// Directional clipboard text sync payload.
     ClipboardText {
         /// UTF-8 clipboard payload.
@@ -214,7 +226,9 @@ impl HostInboundMessage {
     #[must_use]
     pub const fn frame_kind(&self) -> FrameKind {
         match self {
-            Self::MouseKeyboardInput { .. } => FrameKind::MouseKeyboard,
+            Self::MouseKeyboardInput { .. } | Self::PointerAction { .. } => {
+                FrameKind::MouseKeyboard
+            }
             Self::ClipboardText { .. } => FrameKind::ClipboardSync,
             Self::FileChunk { .. } => FrameKind::FileTransfer,
             Self::BlankScreenRequest => FrameKind::BlankScreen,
@@ -223,12 +237,13 @@ impl HostInboundMessage {
 }
 
 /// Host WebRTC peer holding the H.264 video track, pinned DTLS cert, `oud-input` data channel,
-/// and `HostFrameGatekeeper`.
+/// protected consent/banner surface registry, and `HostFrameGatekeeper`.
 pub struct HostMediaPeer {
     peer: Arc<RTCPeerConnection>,
     video_track: Arc<TrackLocalStaticSample>,
     input_channel: Arc<RTCDataChannel>,
     gatekeeper: Arc<Mutex<HostFrameGatekeeper>>,
+    protected_surfaces: ProtectedSurfaceRegistry,
     pipeline: Arc<Mutex<AdaptiveH264Pipeline>>,
     transport_mode: TransportMode,
     local_fingerprint: String,
@@ -302,42 +317,17 @@ impl HostMediaPeer {
             .map_err(|e| CaptureError::WebRtc(e.to_string()))?;
 
         let gatekeeper_arc = Arc::new(Mutex::new(gatekeeper));
+        let protected_surfaces = ProtectedSurfaceRegistry::new();
         let authorized_inputs = Arc::new(Mutex::new(Vec::new()));
         let unexpected_channels_rejected = Arc::new(AtomicU64::new(0));
-
-        let unexpected_dc_count = Arc::clone(&unexpected_channels_rejected);
-        let unexpected_dc_gk = Arc::clone(&gatekeeper_arc);
-        peer.on_data_channel(Box::new(move |dc: Arc<RTCDataChannel>| {
-            let counter = Arc::clone(&unexpected_dc_count);
-            let gk = Arc::clone(&unexpected_dc_gk);
-            Box::pin(async move {
-                counter.fetch_add(1, Ordering::Relaxed);
-                gk.lock().await.record_rejected_payload();
-                close_unexpected_data_channel(dc).await;
-            })
-        }));
-
-        let gk_cb = Arc::clone(&gatekeeper_arc);
-        let auth_cb = Arc::clone(&authorized_inputs);
-        input_channel.on_message(Box::new(move |msg: DataChannelMessage| {
-            let gk = Arc::clone(&gk_cb);
-            let authorized = Arc::clone(&auth_cb);
-            Box::pin(async move {
-                let _ = dispatch_raw_input_bytes(&gk, &authorized, &msg.data, Utc::now()).await;
-            })
-        }));
-
-        let (ice_tx, ice_rx) = mpsc::unbounded_channel();
-        peer.on_ice_candidate(Box::new(move |cand| {
-            let tx = ice_tx.clone();
-            Box::pin(async move {
-                if let Some(c) = cand {
-                    if let Ok(init) = c.to_json() {
-                        let _ = tx.send(init);
-                    }
-                }
-            })
-        }));
+        let ice_rx = wire_host_peer_callbacks(
+            &peer,
+            &input_channel,
+            &gatekeeper_arc,
+            &protected_surfaces,
+            &authorized_inputs,
+            &unexpected_channels_rejected,
+        );
 
         let transport_mode = if ice_config.force_relay {
             TransportMode::TurnRelay
@@ -350,6 +340,7 @@ impl HostMediaPeer {
             video_track,
             input_channel,
             gatekeeper: gatekeeper_arc,
+            protected_surfaces,
             pipeline: Arc::new(Mutex::new(pipeline)),
             transport_mode,
             local_fingerprint,
@@ -451,6 +442,12 @@ impl HostMediaPeer {
         &self.gatekeeper
     }
 
+    /// Returns shared reference to the protected consent/banner surface registry.
+    #[must_use]
+    pub const fn protected_surfaces(&self) -> &ProtectedSurfaceRegistry {
+        &self.protected_surfaces
+    }
+
     /// Returns shared reference to the adaptive H.264 pipeline.
     #[must_use]
     pub const fn pipeline(&self) -> &Arc<Mutex<AdaptiveH264Pipeline>> {
@@ -500,10 +497,13 @@ impl HostMediaPeer {
         Ok(encoded)
     }
 
-    /// Enforces [`HostFrameGatekeeper`] synchronously on a decoded inbound message before OS dispatch.
+    /// Enforces [`HostFrameGatekeeper`] and [`ProtectedSurfaceRegistry`] synchronously on a decoded
+    /// inbound message before OS dispatch.
     ///
     /// # Errors
-    /// Returns [`CaptureError::FrameBlockedByGrant`] if the active grant disallows this frame.
+    /// Returns [`CaptureError::FrameBlockedByGrant`] if the active grant disallows this frame,
+    /// or [`CaptureError::ProtectedSurfaceInputBlocked`] if remote pointer coordinates target an
+    /// active consent prompt or persistent session banner.
     pub async fn enforce_inbound_message(
         &self,
         msg: HostInboundMessage,
@@ -511,22 +511,36 @@ impl HostMediaPeer {
     ) -> Result<HostInboundMessage, CaptureError> {
         let mut gk = self.gatekeeper.lock().await;
         gk.authorize_frame(msg.frame_kind(), now)?;
+        if let HostInboundMessage::PointerAction { x, y, .. } = &msg {
+            if let Err(err) = self.protected_surfaces.enforce_remote_pointer(*x, *y, now) {
+                gk.record_rejected_payload();
+                return Err(err);
+            }
+        }
         drop(gk);
         self.authorized_inputs.lock().await.push(msg.clone());
         Ok(msg)
     }
 
-    /// Validates, parses, and enforces [`HostFrameGatekeeper`] on raw `"oud-input"` bytes,
-    /// incrementing rejection counters on malformed/non-JSON payloads.
+    /// Validates, parses, and enforces [`HostFrameGatekeeper`] + [`ProtectedSurfaceRegistry`] on
+    /// raw `"oud-input"` bytes, incrementing rejection counters on malformed/blocked payloads.
     ///
     /// # Errors
-    /// Returns [`CaptureError::FrameBlockedByGrant`] on malformed JSON or denied frame kind.
+    /// Returns [`CaptureError::FrameBlockedByGrant`] on malformed JSON or denied frame kind,
+    /// or [`CaptureError::ProtectedSurfaceInputBlocked`] on protected surface pointer targets.
     pub async fn process_raw_inbound_bytes(
         &self,
         data: &[u8],
         now: DateTime<Utc>,
     ) -> Result<HostInboundMessage, CaptureError> {
-        dispatch_raw_input_bytes(&self.gatekeeper, &self.authorized_inputs, data, now).await
+        dispatch_raw_input_bytes(
+            &self.gatekeeper,
+            &self.protected_surfaces,
+            &self.authorized_inputs,
+            data,
+            now,
+        )
+        .await
     }
 
     /// Drains inbound messages that passed host [`HostFrameGatekeeper`] enforcement.
@@ -811,8 +825,55 @@ async fn close_unexpected_data_channel(dc: Arc<RTCDataChannel>) {
     }
 }
 
+fn wire_host_peer_callbacks(
+    peer: &RTCPeerConnection,
+    input_channel: &RTCDataChannel,
+    gatekeeper: &Arc<Mutex<HostFrameGatekeeper>>,
+    protected_surfaces: &ProtectedSurfaceRegistry,
+    authorized_inputs: &Arc<Mutex<Vec<HostInboundMessage>>>,
+    unexpected_channels_rejected: &Arc<AtomicU64>,
+) -> mpsc::UnboundedReceiver<RTCIceCandidateInit> {
+    let unexpected_dc_count = Arc::clone(unexpected_channels_rejected);
+    let unexpected_dc_gk = Arc::clone(gatekeeper);
+    peer.on_data_channel(Box::new(move |dc: Arc<RTCDataChannel>| {
+        let counter = Arc::clone(&unexpected_dc_count);
+        let gk = Arc::clone(&unexpected_dc_gk);
+        Box::pin(async move {
+            counter.fetch_add(1, Ordering::Relaxed);
+            gk.lock().await.record_rejected_payload();
+            close_unexpected_data_channel(dc).await;
+        })
+    }));
+
+    let gk_cb = Arc::clone(gatekeeper);
+    let ps_cb = protected_surfaces.clone();
+    let auth_cb = Arc::clone(authorized_inputs);
+    input_channel.on_message(Box::new(move |msg: DataChannelMessage| {
+        let gk = Arc::clone(&gk_cb);
+        let ps = ps_cb.clone();
+        let authorized = Arc::clone(&auth_cb);
+        Box::pin(async move {
+            let _ = dispatch_raw_input_bytes(&gk, &ps, &authorized, &msg.data, Utc::now()).await;
+        })
+    }));
+
+    let (ice_tx, ice_rx) = mpsc::unbounded_channel();
+    peer.on_ice_candidate(Box::new(move |cand| {
+        let tx = ice_tx.clone();
+        Box::pin(async move {
+            if let Some(c) = cand {
+                if let Ok(init) = c.to_json() {
+                    let _ = tx.send(init);
+                }
+            }
+        })
+    }));
+    ice_rx
+}
+
 async fn dispatch_raw_input_bytes(
     gatekeeper: &Mutex<HostFrameGatekeeper>,
+    protected_surfaces: &ProtectedSurfaceRegistry,
     authorized_inputs: &Mutex<Vec<HostInboundMessage>>,
     data: &[u8],
     now: DateTime<Utc>,
@@ -826,6 +887,12 @@ async fn dispatch_raw_input_bytes(
 
     let mut gk = gatekeeper.lock().await;
     gk.authorize_frame(parsed.frame_kind(), now)?;
+    if let HostInboundMessage::PointerAction { x, y, .. } = &parsed {
+        if let Err(err) = protected_surfaces.enforce_remote_pointer(*x, *y, now) {
+            gk.record_rejected_payload();
+            return Err(err);
+        }
+    }
     drop(gk);
 
     authorized_inputs.lock().await.push(parsed.clone());
