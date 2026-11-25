@@ -1,7 +1,35 @@
-//! `oud-capture`: Platform-agnostic traits for screen capture and
-//! grant-gated input injection.
+//! `oud-capture`: Windows screen capture, hardware/software H.264 encoding,
+//! WebRTC P2P/TURN media pipeline, and host-gated `SessionGrant` enforcement.
 
+pub mod capture;
+pub mod encoder;
+pub mod error;
+pub mod gatekeeper;
+pub mod ice_config;
+pub mod preset;
+pub mod telemetry;
+pub mod webrtc_peer;
+
+#[cfg(target_os = "windows")]
+pub mod windows_capture;
+
+pub use capture::{
+    create_platform_capturer, DisplayGeometry, PixelFormat, RawFrame, Rect, ScreenCapturer,
+    SyntheticFrameCapturer,
+};
+pub use encoder::{
+    discover_hardware_h264_adapters, AdaptiveH264Pipeline, EncodedVideoFrame, EncoderKind,
+    SoftwareH264Encoder, VideoEncoder,
+};
+pub use error::{CaptureError, ScreenUnavailableReason};
+pub use gatekeeper::HostFrameGatekeeper;
+pub use ice_config::{IceConfig, TransportMode, TurnFallbackConfig, DEFAULT_STUN_URL};
 pub use oud_protocol::PROTOCOL_VERSION;
+pub use preset::{EncodeProfile, QualityPreset};
+pub use telemetry::{SessionTelemetry, TelemetrySnapshot};
+pub use webrtc_peer::{
+    DeliveredVideoFrame, HostInboundMessage, HostMediaPeer, ReceivedRtpFrame, ViewerMediaPeer,
+};
 
 /// Supported host capture backends.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -56,7 +56,7 @@ git init -b main
   - Implement Add Device pairing wizard, Sessions tab, `Screen unavailable` remediation card, Owner Denied, Request Expired, Code Mismatch, blocking Device Key Changed alert, Host Offline mid-session, and Session Ended summary.
   - **Exit Gate:** Playwright E2E suite renders and asserts all 10 edge states.
 
-- [ ] **Issue `#7`: Windows Host Capture & WebRTC Media Pipeline**
+- [x] **Issue `#7`: Windows Host Capture & WebRTC Media Pipeline**
   - Implement `oud-capture` on Windows (Desktop Duplication / Windows Graphics Capture + hardware H.264 with software fallback) + WebRTC P2P (`webrtc-rs`) + Cloudflare free TURN / `coturn` fallback + Auto/Sharp/Fast quality presets.
   - **Exit Gate:** Same-region benchmark achieves p50 <= 80 ms latency, 1080p@30fps in Auto mode, and Allow-to-first-frame <= 3 s (p95).
 
