@@ -1,0 +1,39 @@
+import { existsSync } from "node:fs";
+import { defineConfig, devices } from "@playwright/test";
+
+const chromePath = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
+const edgePath = "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
+
+function resolveChannel(): "chrome" | "msedge" | undefined {
+  if (process.env.CI) return undefined;
+  if (existsSync(chromePath)) return "chrome";
+  if (existsSync(edgePath)) return "msedge";
+  return undefined;
+}
+
+export default defineConfig({
+  testDir: "./e2e",
+  fullyParallel: true,
+  forbidOnly: Boolean(process.env.CI),
+  retries: process.env.CI ? 1 : 0,
+  reporter: "list",
+  use: {
+    baseURL: "http://127.0.0.1:4173",
+    trace: "on-first-retry",
+  },
+  projects: [
+    {
+      name: "chromium",
+      use: {
+        ...devices["Desktop Chrome"],
+        channel: resolveChannel(),
+      },
+    },
+  ],
+  webServer: {
+    command: "pnpm exec vite preview --host 127.0.0.1 --port 4173 --strictPort",
+    url: "http://127.0.0.1:4173",
+    reuseExistingServer: !process.env.CI,
+    timeout: 30_000,
+  },
+});

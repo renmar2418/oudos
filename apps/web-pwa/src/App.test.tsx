@@ -1,18 +1,19 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import axe from "axe-core";
 import { describe, expect, it } from "vitest";
 import App from "./App";
-import { SAMPLE_AUDIT_ENTRIES } from "./data/sampleData";
+import { DEFAULT_VIEW_ONLY_PERMISSIONS, SAMPLE_AUDIT_ENTRIES } from "./data/sampleData";
 import { buildAuditCsv } from "./screens/AuditLogScreen";
+import type { IncomingSignalEvent, SessionTransport } from "./services/sessionTransport";
 import type { CoreTab } from "./types";
 
 async function expectZeroAxeViolations(container: HTMLElement) {
   const results = await axe.run(container, {
     rules: {
-      // jsdom does not compute CSS layout/colors for color-contrast; all other
-      // WCAG 2.2 AA structural, ARIA, label, landmark, and heading rules run.
+      // jsdom does not compute CSS layout/colors for color-contrast; Playwright Chromium
+      // verifies computed color-contrast in e2e/edge-states.spec.ts.
       "color-contrast": { enabled: false },
     },
   });
@@ -22,44 +23,87 @@ async function expectZeroAxeViolations(container: HTMLElement) {
   expect(criticalOrSerious).toEqual([]);
 }
 
-describe("Oudos web-pwa core 5 screens & accessibility", () => {
-  const tabs: CoreTab[] = ["devices", "requesting", "session", "policies", "audit"];
+function createMemoryTransport() {
+  const listeners = new Set<(event: IncomingSignalEvent) => void>();
+  const sent: unknown[] = [];
+  const transport: SessionTransport = {
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    send(command) {
+      sent.push(command);
+    },
+  };
+  const emit = (event: IncomingSignalEvent) => {
+    act(() => {
+      for (const listener of listeners) {
+        listener(event);
+      }
+    });
+  };
+  return { transport, emit, sent };
+}
+
+describe("Oudos web-pwa screens, edge states & accessibility", () => {
+  const tabs: CoreTab[] = [
+    "devices",
+    "sessions",
+    "requesting",
+    "session",
+    "policies",
+    "audit",
+  ];
 
   it.each(tabs)("renders %s screen with zero critical/serious axe-core violations", async (tab) => {
-    const { container } = render(<App initialTab={tab} />);
+    const { transport } = createMemoryTransport();
+    const { container } = render(<App initialTab={tab} transport={transport} />);
     await expectZeroAxeViolations(container);
   });
 
-  it("navigates from Devices -> Requesting (6-digit SAS) -> Active Session -> Devices", () => {
-    render(<App />);
-    expect(screen.getByRole("heading", { name: "Devices" })).toBeInTheDocument();
+  it("never renders prototype-only Simulate approval or Preview active session buttons", () => {
+    const { transport } = createMemoryTransport();
+    render(<App initialTab="requesting" transport={transport} />);
+    expect(screen.queryByText(/Simulate approval/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Preview active session/i)).not.toBeInTheDocument();
+  });
 
-    const connectButtons = screen.getAllByRole("button", { name: "Request access" });
-    fireEvent.click(connectButtons[0]!);
+  it("navigates Devices -> Requesting -> Host GrantActivated -> Active Session -> Session Ended Summary", () => {
+    const { transport, emit, sent } = createMemoryTransport();
+    render(<App transport={transport} />);
 
+    fireEvent.click(screen.getAllByRole("button", { name: "Request access" })[0]!);
     expect(screen.getByText(/739 204/)).toBeInTheDocument();
     expect(screen.getByText(/Waiting for Dana to allow access/i)).toBeInTheDocument();
+    expect(sent.length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "Preview active session" }));
+    emit({
+      type: "grant_activated",
+      sessionId: "sess-1",
+      approver: "Dana",
+      permissions: { ...DEFAULT_VIEW_ONLY_PERMISSIONS },
+      transportMode: "direct_p2p",
+      latencyMs: 36,
+    });
+
     expect(screen.getByText(/E2E Encrypted/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Ctrl+Alt+Del" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ctrl+Alt+Del" })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: "End" }));
-    expect(screen.getByRole("heading", { name: "Devices" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Session with Dana's ThinkPad closed/i })).toBeInTheDocument();
   });
 
   it("enforces monotonic policy UI locks and prevents relaxing idle timeout", () => {
-    render(<App initialTab="policies" />);
+    const { transport } = createMemoryTransport();
+    render(<App initialTab="policies" transport={transport} />);
     expect(screen.getByText("Locked OFF in v0.1")).toBeInTheDocument();
 
     const select = screen.getByLabelText("Idle disconnect timeout") as HTMLSelectElement;
     expect(select.value).toBe("30m");
 
-    // Relaxing to 1h is disabled/ignored.
     const option1h = screen.getByRole("option", { name: "1 hour" }) as HTMLOptionElement;
     expect(option1h.disabled).toBe(true);
 
-    // Tightening to 15m succeeds.
     fireEvent.change(select, { target: { value: "15m" } });
     expect(select.value).toBe("15m");
   });

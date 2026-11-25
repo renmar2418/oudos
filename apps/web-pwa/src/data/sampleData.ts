@@ -1,4 +1,18 @@
-import type { AuditEntryItem, DeviceItem, PolicyState } from "../types";
+import type {
+  AuditEntryItem,
+  DeviceItem,
+  GrantedPermissions,
+  PolicyState,
+  SessionRecord,
+} from "../types";
+
+export const DEFAULT_VIEW_ONLY_PERMISSIONS: GrantedPermissions = {
+  viewScreen: true,
+  mouseKeyboard: false,
+  clipboardSync: false,
+  fileTransfer: false,
+  blankScreen: false,
+};
 
 export const SAMPLE_DEVICES: DeviceItem[] = [
   {
@@ -10,6 +24,8 @@ export const SAMPLE_DEVICES: DeviceItem[] = [
     serverDomain: "support.example.org",
     enrolledServer: true,
     lastSeenUtc: "2026-11-25T13:10:00Z",
+    pinnedPubkey: "ed25519:6a7f90c2e14b88d3a5c1f0987234b612a98e41c7d91e",
+    accessMode: "asks_first",
   },
   {
     deviceId: "739 204 518",
@@ -20,6 +36,22 @@ export const SAMPLE_DEVICES: DeviceItem[] = [
     serverDomain: "support.example.org",
     enrolledServer: true,
     lastSeenUtc: "2026-11-25T13:14:20Z",
+    pinnedPubkey: "ed25519:14bc82e90f7731a65d4c20918475a6b3c8d9e0f12a4b",
+    activeRequester: "Sam T.",
+    accessMode: "asks_first",
+  },
+  {
+    deviceId: "314 827 905",
+    alias: "Reception-PC",
+    ownerName: "Maya",
+    osName: "Windows 11 Pro",
+    presence: "online",
+    serverDomain: "support.example.org",
+    enrolledServer: true,
+    lastSeenUtc: "2026-11-25T13:15:00Z",
+    pinnedPubkey: "ed25519:98ef34a1b2c3d4e5f60718293a4b5c6d7e8f901234ab",
+    screenUnavailable: "permission_missing",
+    accessMode: "asks_first",
   },
   {
     deviceId: "195 842 603",
@@ -30,6 +62,9 @@ export const SAMPLE_DEVICES: DeviceItem[] = [
     serverDomain: "Personal / Unverified",
     enrolledServer: false,
     lastSeenUtc: "2026-11-24T22:45:00Z",
+    pinnedPubkey: "ed25519:45de67a8b9c0d1e2f30415263748596a7b8c9d0e1f23",
+    notifyWhenOnline: false,
+    accessMode: "asks_first",
   },
 ];
 
@@ -42,6 +77,47 @@ export const INITIAL_POLICY: PolicyState = {
   allowClipboardSync: { value: true, lockedBy: null },
   idleTimeout: { value: "30m", lockedBy: "group" },
 };
+
+export const INITIAL_SESSIONS: SessionRecord[] = [
+  {
+    sessionId: "019363f2-2000-7000-8000-000000000020",
+    deviceId: "739 204 518",
+    deviceAlias: "Studio Desktop",
+    ownerName: "Alex",
+    requester: "Sam T.",
+    approver: "Alex",
+    serverDomain: "support.example.org",
+    enrolledServer: true,
+    status: "active",
+    startedAtUtc: "2026-11-25T13:02:10Z",
+    durationLabel: "12m 10s",
+    permissions: { ...DEFAULT_VIEW_ONLY_PERMISSIONS },
+    transportMode: "direct_p2p",
+    latencyMs: 38,
+    auditSequence: 3,
+    auditEntryHash: "5c2d91f480e37a16b2c4d5e6f708192a3b4c5d6e7f8091a2",
+  },
+  {
+    sessionId: "019363f2-1000-7000-8000-000000000010",
+    deviceId: "482 190 734",
+    deviceAlias: "Dana's ThinkPad",
+    ownerName: "Dana",
+    requester: "alex@support.example.org",
+    approver: "Dana",
+    serverDomain: "support.example.org",
+    enrolledServer: true,
+    status: "ended",
+    startedAtUtc: "2026-11-25T12:40:28Z",
+    endedAtUtc: "2026-11-25T12:52:04Z",
+    durationLabel: "11m 36s",
+    endReason: "Owner clicked End session",
+    permissions: { ...DEFAULT_VIEW_ONLY_PERMISSIONS },
+    transportMode: "direct_p2p",
+    latencyMs: 38,
+    auditSequence: 2,
+    auditEntryHash: "c19d83e472f60514b89a2c3d4e5f6a7b8c9d0e1f2a3b4c5d",
+  },
+];
 
 export const SAMPLE_AUDIT_ENTRIES: AuditEntryItem[] = [
   {

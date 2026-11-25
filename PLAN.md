@@ -52,7 +52,7 @@ git init -b main
   - Build React + TS + Tailwind + Vite PWA implementing Devices, Requesting/Waiting (6-digit SAS + 2-min countdown), Active Session dark viewer (`#0E1214`, quality selector, latency, `Send Shortcuts`), Policies (with admin lock icons), and Audit Log (filters + CSV download).
   - **Exit Gate:** Lighthouse PWA check passes; `axe-core` reports zero critical WCAG 2.2 AA violations.
 
-- [ ] **Issue `#6`: `web-pwa` — Missing MVP Flows & Edge States**
+- [x] **Issue `#6`: `web-pwa` — Missing MVP Flows & Edge States**
   - Implement Add Device pairing wizard, Sessions tab, `Screen unavailable` remediation card, Owner Denied, Request Expired, Code Mismatch, blocking Device Key Changed alert, Host Offline mid-session, and Session Ended summary.
   - **Exit Gate:** Playwright E2E suite renders and asserts all 10 edge states.
 
