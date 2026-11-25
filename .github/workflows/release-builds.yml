@@ -40,13 +40,19 @@ jobs:
       - name: Enable pnpm via Corepack
         run: corepack enable
 
+      - name: Install workspace JS dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Install Rust stable toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+          components: rustfmt, clippy
 
       - name: Cache Cargo artifacts
         uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "apps/host-desktop/src-tauri"
 
       - name: Install Linux Tauri v2 dependencies (v0.2+)
         if: startsWith(matrix.platform, 'ubuntu')
@@ -66,17 +72,18 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: apps/host-desktop
+          args: --target ${{ matrix.target }}
           tagName: ${{ github.ref_name }}
           releaseName: "Oudos ${{ github.ref_name }}"
-          releaseBody: "Consent-first, AGPL-3.0 remote desktop release. Verify SHA-256 checksums before installing."
+          releaseBody: "Consent-first, GNU AGPL-3.0 remote desktop release. Verify SHA-256 checksums before installing."
           releaseDraft: true
           prerelease: true
 
       - name: Generate SHA-256 Checksum Manifest (Windows)
-        if: startsWith(matrix.platform, 'windows') && hashFiles('apps/host-desktop/src-tauri/target/**/bundle/**/*') != ''
+        if: startsWith(matrix.platform, 'windows') && hashFiles('apps/host-desktop/src-tauri/target/**/release/bundle/**/*') != ''
         shell: pwsh
         run: |
-          Get-ChildItem -Recurse apps/host-desktop/src-tauri/target/*/release/bundle/*/* -File |
+          Get-ChildItem -Recurse apps/host-desktop/src-tauri/target/**/release/bundle/*/* -File |
             Get-FileHash -Algorithm SHA256 |
             ForEach-Object { "$($_.Hash.ToLower())  $($_.Path | Split-Path -Leaf)" } |
             Out-File -Encoding ascii SHA256SUMS-windows.txt

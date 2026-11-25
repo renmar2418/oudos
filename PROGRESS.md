@@ -2,8 +2,8 @@
 
 - **current_milestone:** `v0.1`
 - **current_issue:** `#12`
-- **status:** `READY_FOR_NEXT_CHAT` *(Allowed: READY | IN_PROGRESS | AWAITING_HUMAN_REVIEW | READY_FOR_NEXT_CHAT | BLOCKED | MILESTONE_COMPLETE)*
-- **issues_completed_this_session:** `3`
+- **status:** `AWAITING_HUMAN_REVIEW` *(Allowed: READY | IN_PROGRESS | AWAITING_HUMAN_REVIEW | READY_FOR_NEXT_CHAT | BLOCKED | MILESTONE_COMPLETE)*
+- **issues_completed_this_session:** `0`
 - **auto_advance:** `true`
 - **hard_stop_after_issues:** `#2, #7, #8, #12, #17, #20, #22`
 
@@ -21,4 +21,4 @@
 - **Issue `#11` (`e256b81`):** Added persistent server Ed25519 identity keypair + ICE advertisement & graceful shutdown in `crates/oud-server` (`lib.rs`, `main.rs`), production `deploy/Dockerfile.server`, `deploy/Dockerfile.web`, `deploy/nginx.conf`, `deploy/Caddyfile`, `deploy/coturn/turnserver.conf`, `deploy/docker-compose.yml`, `.dockerignore`, `.env.example`, `deploy/.env.example`, and 3-minute `docs/SELF_HOSTING.md` (zero paywalled features; direct P2P default + optional `coturn` / Cloudflare TURN). Verified `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` (`oud-server` 2+7, `oud-capture` 20+10, `oud-policy` 5+1, `oud-protocol` 14+8), `cargo build -p oud-server --bin oud-server`, `pnpm typecheck`, `pnpm --dir apps/web-pwa run build`, `apps/web-pwa` Vitest (13/13), and `deploy/docker-compose.yml` YAML validation (live `docker compose up` pending local Docker/WSL2 install).
 
 ## Active Blockers
-- *Context Hygiene Gate (`#9 -> #11`):* 3 consecutive issues completed; paused at `READY_FOR_NEXT_CHAT` before Issue `#12` (External Action Gate: 10-second human usability test, GitHub Actions release tag `v0.1.0`, SignPath submission). Live `docker compose up` verification for `#11` is pending local Docker Engine / WSL2 Ubuntu 24.04 installation on this Windows host.
+- **Issue `#12` (`AWAITING_HUMAN_REVIEW` — External Action Gate):** Automated repo preparation complete (`0.1.0` version alignment across Cargo/Tauri/pnpm manifests, `.github/workflows/ci-protocol-security.yml` & `.github/workflows/release-builds.yml` audit, `CHANGELOG.md`, `docs/USABILITY_TEST_SCRIPT.md`, `README.md`, AGPL-3.0/security/UX hygiene sweep, and full Rust + Tauri + Vitest + Playwright E2E green). Pending human execution: (1) 5-tester 10-second consent comprehension test using `docs/USABILITY_TEST_SCRIPT.md`, (2) GitHub push & `v0.1.0` tag to trigger reproducible Windows installer builds, (3) SignPath Foundation OSS signing submission, and (4) live `docker compose up` smoke check in WSL2 Ubuntu 24.04 / Docker Engine.

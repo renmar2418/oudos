@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   rust-workspace:
-    name: Rust Protocol, Policy & Server Checks
+    name: Rust Protocol, Policy & Server Checks (Ubuntu)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -31,16 +31,70 @@ jobs:
 
       - name: Check formatting, lints, and tests
         run: |
-          if [ -f "Cargo.toml" ]; then
-            cargo fmt --all -- --check
-            cargo clippy --workspace --all-targets -- -D warnings
-            cargo test --workspace
-          else
-            echo "Cargo.toml not scaffolded yet (Issue #1 pending)."
-          fi
+          cargo fmt --all -- --check
+          cargo clippy --workspace --all-targets -- -D warnings
+          cargo test --workspace
 
-  web-pwa:
-    name: Web PWA Typecheck & Build
+  windows-host:
+    name: Windows Host & Tauri Checks
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable pnpm via Corepack
+        run: corepack enable
+
+      - name: Install workspace JS dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Rust stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo registry and build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            apps/host-desktop/src-tauri
+
+      - name: Check root Rust workspace on Windows
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
+          cargo fmt --all -- --check
+          cargo clippy --workspace --all-targets -- -D warnings
+          cargo test --workspace
+
+      - name: Check standalone Tauri host crate
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
+          cargo fmt --manifest-path apps/host-desktop/src-tauri/Cargo.toml --all -- --check
+          cargo clippy --manifest-path apps/host-desktop/src-tauri/Cargo.toml --all-targets -- -D warnings
+          cargo test --manifest-path apps/host-desktop/src-tauri/Cargo.toml
+          cargo build --manifest-path apps/host-desktop/src-tauri/Cargo.toml --bin oud-host-desktop
+
+      - name: Typecheck, test, and build host-desktop UI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
+          pnpm --dir apps/host-desktop run typecheck
+          pnpm --dir apps/host-desktop run test
+          pnpm --dir apps/host-desktop run build
+
+  frontend-workspace:
+    name: Frontend Typecheck, Build, Unit & E2E Checks
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -54,15 +108,23 @@ jobs:
       - name: Enable pnpm via Corepack
         run: corepack enable
 
-      - name: Install, typecheck, and build web-pwa
+      - name: Install workspace JS dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck and build all JS packages
         run: |
-          if [ -f "apps/web-pwa/package.json" ]; then
-            pnpm --dir apps/web-pwa install --frozen-lockfile || pnpm --dir apps/web-pwa install
-            pnpm --dir apps/web-pwa run typecheck
-            pnpm --dir apps/web-pwa run build
-          else
-            echo "apps/web-pwa/package.json not scaffolded yet (Issue #1/#5 pending)."
-          fi
+          pnpm typecheck
+          pnpm build
+
+      - name: Run Vitest + axe-core accessibility suites
+        run: |
+          pnpm --dir apps/host-desktop run test
+          pnpm --dir apps/web-pwa run test
+
+      - name: Install Playwright Chromium and run web-pwa E2E tests
+        run: |
+          pnpm --dir apps/web-pwa exec playwright install chromium --with-deps
+          pnpm --dir apps/web-pwa run test:e2e
 
   repo-governance:
     name: Governance & License Verification
@@ -71,11 +133,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Verify required governance files exist
+      - name: Verify required governance files and AGPL-3.0 license
         run: |
           test -f AGENTS.md
           test -f PLAN.md
           test -f README.md
+          test -f CHANGELOG.md
+          test -f LICENSE
           test -f docs/DECISIONS.md
+          test -f docs/USABILITY_TEST_SCRIPT.md
           test -f .github/SECURITY.md
-          echo "All core governance documents present."
+          test -f deploy/docker-compose.yml
+          grep -q "GNU AFFERO GENERAL PUBLIC LICENSE" LICENSE
+          echo "All core governance documents and GNU AGPL-3.0 license present."
