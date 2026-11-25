@@ -1,0 +1,34 @@
+# syntax=docker/dockerfile:1
+
+FROM rust:1.85-bookworm AS builder
+WORKDIR /src
+
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+
+RUN cargo build --release --locked -p oud-server --bin oud-server
+
+FROM debian:bookworm-slim AS runtime
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --uid 10001 --create-home --home-dir /var/lib/oudos oudos
+
+COPY --from=builder /src/target/release/oud-server /usr/local/bin/oud-server
+
+RUN mkdir -p /var/lib/oudos && chown -R oudos:oudos /var/lib/oudos
+USER oudos
+WORKDIR /var/lib/oudos
+
+ENV OUD_BIND_ADDR=0.0.0.0:8080 \
+    OUD_DB_PATH=/var/lib/oudos/oudos.db \
+    OUD_SERVER_KEY_PATH=/var/lib/oudos/server.key \
+    RUST_LOG=info
+
+EXPOSE 8080
+VOLUME ["/var/lib/oudos"]
+
+HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:8080/health || exit 1
+
+ENTRYPOINT ["/usr/local/bin/oud-server"]

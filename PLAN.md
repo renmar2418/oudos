@@ -73,7 +73,7 @@ git init -b main
   - Implement 15-minute expiring one-time support links bound to enrolled server identity, requester cooldowns after 3 denials/mismatches, and host-side Block/Report actions.
   - **Exit Gate:** Expired links (>15m) rejected; repeated denials trigger automatic lockout.
 
-- [ ] **Issue `#11`: 1-Command Self-Hosting (`deploy/docker-compose.yml`)**
+- [x] **Issue `#11`: 1-Command Self-Hosting (`deploy/docker-compose.yml`)**
   - Package `oud-server` + `web-pwa` + optional `coturn` / Cloudflare TURN config and `docs/SELF_HOSTING.md`.
   - **Exit Gate:** Fresh Ubuntu 24.04 WSL2 instance boots the complete stack with working audit console in under 3 minutes.
 

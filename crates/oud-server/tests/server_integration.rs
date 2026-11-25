@@ -115,7 +115,15 @@ async fn enrollment_presence_and_auth_enforcement() {
         .expect("unauth devices");
     assert_eq!(unauth.status(), StatusCode::UNAUTHORIZED);
 
-    // Pre-paired server info returns raw domain and pubkey.
+    // Health endpoint and pre-paired server info returns raw domain, pubkey, and ICE config.
+    let health_res = client
+        .get(format!("{}/health", srv.base_url))
+        .send()
+        .await
+        .expect("health");
+    assert_eq!(health_res.status(), StatusCode::OK);
+    assert_eq!(health_res.text().await.expect("health text"), "ok");
+
     let info: ServerInfoResponse = client
         .get(format!("{}/api/v1/server-info", srv.base_url))
         .send()
@@ -126,6 +134,8 @@ async fn enrollment_presence_and_auth_enforcement() {
         .expect("server info json");
     assert_eq!(info.server_domain, "support.example.org");
     assert_eq!(info.server_pubkey, srv.server_pubkey);
+    assert_eq!(info.ice.turn_mode, "direct_p2p");
+    assert!(info.ice.stun_url.starts_with("stun:"));
 
     let passkey = IdentityKeyPair::generate();
     let token = authenticate_user(&client, &srv.base_url, "owner@example.org", &passkey).await;

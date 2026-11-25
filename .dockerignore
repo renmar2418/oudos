@@ -1,0 +1,12 @@
+.git/
+target/
+apps/host-desktop/src-tauri/target/
+node_modules/
+apps/*/node_modules/
+apps/*/dist/
+graphify-out/
+*.db
+*.db-shm
+*.db-wal
+.env
+deploy/.env

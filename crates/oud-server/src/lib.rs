@@ -9,6 +9,8 @@ pub mod rate_limit;
 pub mod signaling;
 pub mod support_links;
 
+use std::fs;
+use std::path::Path as FsPath;
 use std::sync::Arc;
 
 use axum::extract::{Path, State};
@@ -137,6 +139,27 @@ pub fn server_protocol_banner() -> (&'static str, PolicyScope) {
     (PROTOCOL_VERSION, PolicyScope::Organisation)
 }
 
+/// Public ICE/TURN advertisement exposed via `/api/v1/server-info` (never includes secrets).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IceAdvertisement {
+    /// Configured transport mode (`"direct_p2p"`, `"coturn"`, or `"cloudflare"`).
+    pub turn_mode: String,
+    /// Public STUN URL (`stun:stun.cloudflare.com:3478` by default).
+    pub stun_url: String,
+    /// Optional public TURN/TURNS URLs (when `coturn` or `cloudflare` is configured).
+    pub turn_urls: Vec<String>,
+}
+
+impl Default for IceAdvertisement {
+    fn default() -> Self {
+        Self {
+            turn_mode: "direct_p2p".to_string(),
+            stun_url: "stun:stun.cloudflare.com:3478".to_string(),
+            turn_urls: Vec::new(),
+        }
+    }
+}
+
 /// Public server identity metadata for pre-paired enrollment.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ServerInfoResponse {
@@ -146,6 +169,8 @@ pub struct ServerInfoResponse {
     pub server_pubkey: IdentityPublicKey,
     /// Protocol version.
     pub protocol_version: String,
+    /// Non-secret STUN/TURN transport advertisement.
+    pub ice: IceAdvertisement,
 }
 
 async fn health() -> &'static str {
@@ -157,7 +182,91 @@ async fn server_info(State(state): State<AppState>) -> Json<ServerInfoResponse> 
         server_domain: state.server_domain.clone(),
         server_pubkey: state.server_keypair.public_key(),
         protocol_version: PROTOCOL_VERSION.to_string(),
+        ice: ice_advertisement_from_env(),
     })
+}
+
+/// Loads an Ed25519 server identity seed from `path` (64-char hex) or generates and persists
+/// a new one so the server's public key fingerprint remains stable across container restarts.
+///
+/// # Errors
+/// Returns [`ServerError::Internal`] if file I/O fails or [`ServerError::BadRequest`] if an
+/// existing key file is malformed.
+pub fn load_or_create_server_keypair(path: &FsPath) -> Result<IdentityKeyPair, ServerError> {
+    if path.exists() {
+        let raw = fs::read_to_string(path).map_err(|e| {
+            ServerError::Internal(format!("read server key `{}`: {e}", path.display()))
+        })?;
+        let decoded = hex::decode(raw.trim())
+            .map_err(|_| ServerError::BadRequest("corrupt hex server key seed".to_string()))?;
+        let seed: [u8; 32] = decoded
+            .try_into()
+            .map_err(|_| ServerError::BadRequest("server key seed must be 32 bytes".to_string()))?;
+        return Ok(IdentityKeyPair::from_seed(seed));
+    }
+
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent).map_err(|e| {
+                ServerError::Internal(format!("create server key dir `{}`: {e}", parent.display()))
+            })?;
+        }
+    }
+
+    let keypair = IdentityKeyPair::generate();
+    let seed_hex = hex::encode(keypair.to_seed());
+    fs::write(path, format!("{seed_hex}\n")).map_err(|e| {
+        ServerError::Internal(format!("write server key `{}`: {e}", path.display()))
+    })?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
+    }
+    Ok(keypair)
+}
+
+/// Builds non-secret [`IceAdvertisement`] metadata from environment variables.
+#[must_use]
+pub fn ice_advertisement_from_env() -> IceAdvertisement {
+    let turn_mode = std::env::var("OUD_TURN_MODE")
+        .unwrap_or_else(|_| "direct_p2p".to_string())
+        .trim()
+        .to_ascii_lowercase();
+    let stun_url = std::env::var("OUD_STUN_URL")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| "stun:stun.cloudflare.com:3478".to_string());
+
+    let mut turn_urls = Vec::new();
+    match turn_mode.as_str() {
+        "coturn" => {
+            if let Ok(host) = std::env::var("OUD_COTURN_HOST") {
+                let host = host.trim();
+                if !host.is_empty() {
+                    let port =
+                        std::env::var("OUD_COTURN_PORT").unwrap_or_else(|_| "3478".to_string());
+                    let tls_port =
+                        std::env::var("OUD_COTURN_TLS_PORT").unwrap_or_else(|_| "5349".to_string());
+                    turn_urls.push(format!("turn:{host}:{port}?transport=udp"));
+                    turn_urls.push(format!("turn:{host}:{port}?transport=tcp"));
+                    turn_urls.push(format!("turns:{host}:{tls_port}?transport=tcp"));
+                }
+            }
+        }
+        "cloudflare" => {
+            turn_urls.push("turn:turn.cloudflare.com:3478?transport=udp".to_string());
+            turn_urls.push("turn:turn.cloudflare.com:3478?transport=tcp".to_string());
+            turn_urls.push("turns:turn.cloudflare.com:5349?transport=tcp".to_string());
+        }
+        _ => {}
+    }
+
+    IceAdvertisement {
+        turn_mode,
+        stun_url,
+        turn_urls,
+    }
 }
 
 /// Live presence state for a registered host device.
@@ -576,5 +685,17 @@ mod tests {
         let (version, scope) = server_protocol_banner();
         assert_eq!(version, "oudos-v0.1");
         assert_eq!(scope, PolicyScope::Organisation);
+    }
+
+    #[test]
+    fn server_identity_keypair_persists_across_restarts() {
+        let temp_dir = std::env::temp_dir().join(format!("oudos-srv-test-{}", Uuid::now_v7()));
+        let key_path = temp_dir.join("server.key");
+
+        let kp1 = load_or_create_server_keypair(&key_path).expect("create keypair");
+        let kp2 = load_or_create_server_keypair(&key_path).expect("reload keypair");
+        assert_eq!(kp1.public_key(), kp2.public_key());
+
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 }
