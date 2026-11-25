@@ -6,5 +6,22 @@ license.workspace = true
 authors.workspace = true
 description = "Core cryptographic identity, SAS derivation, consent state machine, SessionGrant, and hash-chained audit primitives for Oudos."
 
+[dependencies]
+chrono = { version = "0.4", features = ["serde", "clock"] }
+ed25519-dalek = { version = "2.1", features = ["rand_core", "zeroize"] }
+hex = "0.4"
+hkdf = "0.12"
+rand = "0.8"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+thiserror = "2.0"
+uuid = { version = "1.11", features = ["v7", "serde"] }
+x25519-dalek = { version = "2.0", features = ["static_secrets", "zeroize"] }
+zeroize = { version = "1.8", features = ["derive"] }
+
+[dev-dependencies]
+proptest = "1.5"
+
 [lints]
 workspace = true

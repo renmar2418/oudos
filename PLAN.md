@@ -36,7 +36,7 @@ git init -b main
   - Create Cargo workspace (`crates/oud-protocol`, `oud-policy`, `oud-capture`, `oud-server`), pnpm workspace (`apps/web-pwa`, `apps/host-desktop`, `apps/mobile-capacitor`), `LICENSE` (AGPL-3.0), `.github/SECURITY.md`, `.github/workflows/ci-protocol-security.yml`, and docs (`ARCHITECTURE.md`, `PROTOCOL.md`, `THREAT_MODEL.md`, `CONSENT_UX_SPEC.md`, `SELF_HOSTING.md`).
   - **Exit Gate:** `cargo test --workspace` and `pnpm typecheck` run green in CI.
 
-- [ ] **Issue `#2`: `oud-protocol` — Identity Keys, SAS & Consent State Machine**
+- [x] **Issue `#2`: `oud-protocol` — Identity Keys, SAS & Consent State Machine**
   - Implement Ed25519 identity keys, X25519 ephemeral handshake, commit-before-reveal 6-digit SAS derivation, signed `SessionGrant` structs, and SHA-256 hash-chained audit events.
   - **Exit Gate:** `proptest` runs 10,000+ state-machine sequences proving zero paths reach `GRANT_SIGNED_ACTIVE` without a valid host signature, and every negative transition (deny, 2m timeout, mismatch, key change, revoke) fails closed.
 

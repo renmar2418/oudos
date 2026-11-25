@@ -1,14 +1,14 @@
 # Oudos Build Progress
 
 - **current_milestone:** `v0.1`
-- **current_issue:** `#1`
+- **current_issue:** `#2`
 - **status:** `IN_PROGRESS` *(Allowed: READY | IN_PROGRESS | AWAITING_HUMAN_REVIEW | READY_FOR_NEXT_CHAT | BLOCKED | MILESTONE_COMPLETE)*
-- **issues_completed_this_session:** `0`
+- **issues_completed_this_session:** `1`
 - **auto_advance:** `true`
 - **hard_stop_after_issues:** `#2, #7, #8, #12, #17, #20, #22`
 
 ## Completed Log
-*(Agent appends one entry per verified issue commit)*
+- **Issue `#1` (`4bff486`):** Scaffolded Cargo workspace (`oud-protocol`, `oud-policy`, `oud-capture`, `oud-server`), pnpm workspace (`apps/web-pwa`, `apps/host-desktop`, `apps/mobile-capacitor`), `LICENSE` (AGPL-3.0), `README.md`, and `docs/*`. Verified `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` (4/4 unit tests), `pnpm typecheck`, and `pnpm --dir apps/web-pwa run build`.
 
 ## Active Blockers
 - None
