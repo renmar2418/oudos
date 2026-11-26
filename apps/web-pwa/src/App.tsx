@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FacingBracketsIcon } from "./components/FacingBracketsIcon";
 import { AddDeviceWizard } from "./components/AddDeviceWizard";
 import {
@@ -564,6 +564,38 @@ export const App: React.FC<AppProps> = ({
     setActiveTab("devices");
   };
 
+  const navRef = useRef<HTMLElement | null>(null);
+  const [navCanScrollLeft, setNavCanScrollLeft] = useState(false);
+  const [navCanScrollRight, setNavCanScrollRight] = useState(false);
+
+  const syncNavScrollCues = useCallback(() => {
+    const el = navRef.current;
+    if (!el) return;
+    const maxScroll = el.scrollWidth - el.clientWidth;
+    setNavCanScrollLeft(el.scrollLeft > 4);
+    setNavCanScrollRight(maxScroll - el.scrollLeft > 4);
+  }, []);
+
+  useEffect(() => {
+    syncNavScrollCues();
+    if (typeof window === "undefined") return;
+    window.addEventListener("resize", syncNavScrollCues);
+    return () => window.removeEventListener("resize", syncNavScrollCues);
+  }, [syncNavScrollCues]);
+
+  useEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    const activeBtn = el.querySelector<HTMLButtonElement>('[aria-current="page"]');
+    if (activeBtn && typeof activeBtn.scrollIntoView === "function") {
+      activeBtn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    }
+    const raf = typeof window !== "undefined" ? window.requestAnimationFrame(syncNavScrollCues) : 0;
+    return () => {
+      if (raf && typeof window !== "undefined") window.cancelAnimationFrame(raf);
+    };
+  }, [activeTab, syncNavScrollCues]);
+
   const isLiveSessionView = activeTab === "session" && !endedSummarySession;
   const iconState =
     requestOutcome.kind === "device_key_changed" ||
@@ -590,8 +622,8 @@ export const App: React.FC<AppProps> = ({
 
       <header className="border-b border-[#DADDD8] bg-white text-[#111618]">
         <div className="mx-auto flex max-w-6xl flex-col sm:flex-row sm:items-center sm:justify-between sm:gap-x-6 sm:px-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:gap-5">
-            <div className="flex items-center justify-between px-4 py-2.5 sm:px-0 sm:py-0">
+          <div className="flex min-w-0 flex-col sm:flex-row sm:items-center sm:gap-5">
+            <div className="flex items-center justify-between px-4 py-2.5 sm:shrink-0 sm:px-0 sm:py-0">
               <div className="flex items-center gap-2">
                 <span className={iconState === "alert" ? "text-[#B42318]" : "text-[#0F5C52]"}>
                   <FacingBracketsIcon state={iconState} className="h-6 w-6" label="Oudos" />
@@ -605,37 +637,53 @@ export const App: React.FC<AppProps> = ({
               </span>
             </div>
 
-            <nav
-              aria-label="Primary navigation"
-              className="flex items-center gap-1 overflow-x-auto border-t border-[#DADDD8]/70 px-4 sm:border-t-0 sm:px-0"
-            >
-              {NAV_ITEMS.map((item) => {
-                const current = activeTab === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    aria-current={current ? "page" : undefined}
-                    onClick={() => {
-                      if (item.id === "session") setEndedSummarySession(null);
-                      setActiveTab(item.id);
-                    }}
-                    className={`border-b-2 px-2 py-2.5 text-xs whitespace-nowrap transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C52] sm:px-2.5 sm:py-3 sm:text-sm ${
-                      current
-                        ? "border-[#0F5C52] font-semibold text-[#111618]"
-                        : "border-transparent font-medium text-[#525D63] hover:border-[#DADDD8] hover:text-[#111618]"
-                    }`}
-                  >
-                    {item.label}
-                  </button>
-                );
-              })}
-            </nav>
+            <div className="relative min-w-0 border-t border-[#DADDD8]/70 sm:border-t-0">
+              {navCanScrollLeft && (
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-white via-white/85 to-transparent sm:hidden"
+                />
+              )}
+              <nav
+                ref={navRef}
+                onScroll={syncNavScrollCues}
+                aria-label="Primary navigation"
+                className="no-scrollbar flex items-center gap-1 overflow-x-auto px-4 pr-8 [touch-action:pan-x] sm:overflow-visible sm:px-0 sm:pr-0"
+              >
+                {NAV_ITEMS.map((item) => {
+                  const current = activeTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      aria-current={current ? "page" : undefined}
+                      onClick={() => {
+                        if (item.id === "session") setEndedSummarySession(null);
+                        setActiveTab(item.id);
+                      }}
+                      className={`min-h-[44px] shrink-0 border-b-2 px-2.5 py-2.5 text-[13px] whitespace-nowrap transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C52] sm:min-h-0 sm:py-3 sm:text-sm ${
+                        current
+                          ? "border-[#0F5C52] font-semibold text-[#111618]"
+                          : "border-transparent font-medium text-[#525D63] hover:border-[#DADDD8] hover:text-[#111618]"
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </nav>
+              {navCanScrollRight && (
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l from-white via-white/90 to-transparent sm:hidden"
+                />
+              )}
+            </div>
           </div>
 
           <div
             aria-label="Account and server identity"
-            className="hidden items-center gap-2.5 py-2 text-xs text-[#525D63] lg:flex"
+            className="hidden shrink-0 items-center gap-2.5 py-2 text-xs text-[#525D63] lg:flex"
           >
             <span className="font-medium text-[#111618]">alex@support.example.org</span>
             <span className="h-3.5 w-px bg-[#DADDD8]" aria-hidden="true" />
@@ -648,8 +696,8 @@ export const App: React.FC<AppProps> = ({
         id="main-content"
         className={
           isLiveSessionView
-            ? "flex flex-1 flex-col bg-[#0E1214]"
-            : "mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6"
+            ? "flex min-w-0 flex-1 flex-col bg-[#0E1214]"
+            : "mx-auto w-full max-w-6xl min-w-0 flex-1 px-4 py-6 sm:px-6"
         }
       >
         {activeTab === "devices" && (

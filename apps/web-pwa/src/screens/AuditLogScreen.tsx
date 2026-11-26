@@ -54,7 +54,7 @@ export const AuditLogScreen: React.FC<AuditLogScreenProps> = ({ entries }) => {
   };
 
   return (
-    <section aria-labelledby="audit-heading" className="space-y-5">
+    <section aria-labelledby="audit-heading" className="min-w-0 space-y-5">
       <div className="flex flex-col gap-3 border-b border-[#DADDD8] pb-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 id="audit-heading" className="text-2xl font-semibold tracking-tight text-[#111618]">
@@ -68,7 +68,7 @@ export const AuditLogScreen: React.FC<AuditLogScreenProps> = ({ entries }) => {
         <button
           type="button"
           onClick={handleExportCsv}
-          className="inline-flex min-h-[38px] items-center gap-2 rounded-md bg-[#0F5C52] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0B473F] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C52] focus-visible:ring-offset-2"
+          className="inline-flex min-h-[44px] shrink-0 items-center justify-center gap-2 rounded-md bg-[#0F5C52] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0B473F] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C52] focus-visible:ring-offset-2 sm:min-h-[38px]"
         >
           <Download className="h-4 w-4" aria-hidden="true" />
           Export CSV
@@ -89,11 +89,16 @@ export const AuditLogScreen: React.FC<AuditLogScreenProps> = ({ entries }) => {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Filter by device, actor, or action..."
-          className="w-full rounded-md border border-[#DADDD8] bg-white py-2 pl-9 pr-3 text-sm text-[#111618] placeholder:text-[#525D63] focus:border-[#0F5C52] focus:outline-none focus:ring-2 focus:ring-[#0F5C52]/25"
+          className="min-h-[44px] w-full rounded-md border border-[#DADDD8] bg-white py-2 pl-9 pr-3 text-sm text-[#111618] placeholder:text-[#525D63] focus:border-[#0F5C52] focus:outline-none focus:ring-2 focus:ring-[#0F5C52]/25 sm:min-h-[38px]"
         />
       </div>
 
-      <div className="overflow-x-auto border border-[#DADDD8] bg-white">
+      <div
+        role="region"
+        aria-label="Audit log entries table"
+        tabIndex={0}
+        className="max-w-full overflow-x-auto border border-[#DADDD8] bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C52]"
+      >
         <table className="w-full border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-[#DADDD8] bg-[#F5F6F4] text-xs font-medium text-[#525D63]">

@@ -365,10 +365,44 @@ describe("Oudos host-desktop Consent UI, Banner & Tray", () => {
     const { bridge } = makeMemoryBridge(initial);
     const { container } = render(<App bridge={bridge} initialSnapshot={initial} />);
 
+    expect(screen.getByTestId("consent-scrollable-body")).toBeInTheDocument();
+    expect(screen.getByTestId("consent-action-footer")).toBeInTheDocument();
+
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /Block & report requester/i }));
     });
     expect(screen.getByText(/Requester blocked on this device/i)).toBeInTheDocument();
+    await expectZeroAxeViolations(container);
+  });
+
+  it("keeps banner action controls non-wrapping even with long requester/domain strings", async () => {
+    const longSnap = makePendingSnapshot({
+      tray_state: "in_session",
+      pending_request: null,
+      active_banner: {
+        session_id: "019363f2-0000-7000-8000-000000000099",
+        requester_name: "Very Long Support Specialist Name That Might Truncate",
+        server_domain: "enterprise-support-relay.long-subdomain.example.org",
+        server_enrolled: true,
+        status_label: "LIVE",
+        permissions: {
+          view_screen: true,
+          mouse_keyboard: true,
+          clipboard_sync: false,
+          file_transfer: false,
+          blank_screen: false,
+        },
+        permission_summary: "Screen + Input",
+        duration: "this_session",
+        expires_at_utc: "2026-11-26T16:00:00Z",
+      },
+    });
+    const mem = makeMemoryBridge(longSnap);
+    const { container } = render(
+      <App bridge={mem.bridge} viewOverride="banner" initialSnapshot={longSnap} />
+    );
+    expect(screen.getByRole("button", { name: "Stop input" })).toHaveClass("whitespace-nowrap");
+    expect(screen.getByRole("button", { name: "End session" })).toHaveClass("whitespace-nowrap");
     await expectZeroAxeViolations(container);
   });
 });

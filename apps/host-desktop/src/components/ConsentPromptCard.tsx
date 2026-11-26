@@ -136,9 +136,9 @@ export const ConsentPromptCard: React.FC<ConsentPromptCardProps> = ({
   return (
     <main
       aria-labelledby="consent-card-heading"
-      className="mx-auto flex min-h-[660px] w-full max-w-[520px] flex-col bg-white text-[#111618]"
+      className="mx-auto flex h-screen max-h-[660px] w-full max-w-[520px] flex-col overflow-hidden bg-white text-[#111618]"
     >
-      <header className="flex items-center justify-between border-b border-[#DADDD8] bg-white px-5 py-2.5">
+      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-[#DADDD8] bg-white px-4 py-2 sm:px-5 sm:py-2.5">
         <div className="flex items-center gap-2">
           <HostFacingBracketsIcon
             state="idle"
@@ -151,7 +151,7 @@ export const ConsentPromptCard: React.FC<ConsentPromptCardProps> = ({
         </div>
 
         <span
-          className="inline-flex items-center gap-1.5 font-mono-code text-xs font-semibold text-[#525D63]"
+          className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap font-mono-code text-xs font-semibold text-[#525D63]"
           aria-live="polite"
           aria-label={`Request expires in ${formatCountdown(ttlRemaining)}`}
         >
@@ -163,17 +163,17 @@ export const ConsentPromptCard: React.FC<ConsentPromptCardProps> = ({
       {!request.server_enrolled && (
         <div
           role="status"
-          className="flex items-center gap-2 border-b border-[#B54708]/35 bg-[#FEF0C7] px-5 py-2 text-xs font-semibold text-[#7A2E0E]"
+          className="flex shrink-0 items-center gap-2 border-b border-[#B54708]/35 bg-[#FEF0C7] px-4 py-1.5 text-xs font-semibold text-[#7A2E0E] sm:px-5 sm:py-2"
         >
           <ShieldAlert className="h-4 w-4 shrink-0 text-[#B54708]" aria-hidden="true" />
           <span>Unverified relay — this computer has not enrolled this server domain.</span>
         </div>
       )}
 
-      <section className="border-b border-[#DADDD8] bg-white px-5 py-3">
+      <section className="shrink-0 border-b border-[#DADDD8] bg-white px-4 py-2.5 sm:px-5 sm:py-3">
         <h1
           id="consent-card-heading"
-          className="font-display text-[20px] font-semibold leading-snug tracking-[-0.015em] text-[#111618]"
+          className="font-display text-[19px] font-semibold leading-snug tracking-[-0.015em] text-[#111618] sm:text-[20px]"
         >
           <span data-testid="consent-requester-name" className="break-words">
             {request.requester_name}
@@ -188,7 +188,7 @@ export const ConsentPromptCard: React.FC<ConsentPromptCardProps> = ({
               className="inline-flex items-center gap-1.5 font-mono-code text-xs font-semibold text-[#0F5C52]"
             >
               <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              <span>{request.server_domain}</span>
+              <span className="break-all">{request.server_domain}</span>
             </span>
           ) : (
             <span
@@ -196,7 +196,7 @@ export const ConsentPromptCard: React.FC<ConsentPromptCardProps> = ({
               className="inline-flex items-center gap-1.5 font-mono-code text-xs font-semibold text-[#B54708]"
             >
               <ShieldAlert className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              <span>{request.server_domain} · Personal / Unverified</span>
+              <span className="break-all">{request.server_domain} · Personal / Unverified</span>
             </span>
           )}
         </div>
@@ -208,11 +208,11 @@ export const ConsentPromptCard: React.FC<ConsentPromptCardProps> = ({
 
       <section
         aria-label="6-digit verification code"
-        className="border-b border-[#DADDD8] bg-[#F5F6F4] px-5 py-3 text-center"
+        className="shrink-0 border-b border-[#DADDD8] bg-[#F5F6F4] px-4 py-2.5 text-center sm:px-5 sm:py-3"
       >
         <p
           data-testid="sas-code-display"
-          className="font-mono-code text-[30px] font-semibold leading-none tracking-[0.16em] text-[#111618]"
+          className="font-mono-code text-[26px] font-semibold leading-none tracking-[0.14em] text-[#111618] sm:text-[30px] sm:tracking-[0.16em]"
         >
           {request.sas_code}
         </p>
@@ -225,11 +225,11 @@ export const ConsentPromptCard: React.FC<ConsentPromptCardProps> = ({
         <div
           role="alert"
           data-testid="first-time-cooling-warning"
-          className="border-b border-[#B54708]/35 bg-[#FEF0C7] px-5 py-2.5 text-[#7A2E0E]"
+          className="shrink-0 border-b border-[#B54708]/35 bg-[#FEF0C7] px-4 py-2 text-[#7A2E0E] sm:px-5 sm:py-2.5"
         >
           <div className="flex items-start gap-2">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#B54708]" aria-hidden="true" />
-            <div className="text-[13px] leading-snug">
+            <div className="text-[12.5px] leading-snug sm:text-[13px]">
               <p className="font-medium">
                 STOP: Did someone call or message you about your bank, a refund, or a virus? Real
                 banks will NEVER ask you to share your screen.
@@ -244,103 +244,111 @@ export const ConsentPromptCard: React.FC<ConsentPromptCardProps> = ({
         </div>
       )}
 
-      <fieldset className="border-b border-[#DADDD8] bg-white">
-        <legend className="sr-only">Permissions for this session</legend>
-        <div className="divide-y divide-[#DADDD8]">
-          <PermissionSwitchRow
-            id="perm-view-screen"
-            label="See your screen"
-            note="Required"
-            checked
-            disabled
-            lockedOn
-          />
-          <PermissionSwitchRow
-            id="perm-mouse-keyboard"
-            label="Mouse & keyboard"
-            note={!request.policy_ceilings.allow_mouse_keyboard ? "Off by policy" : undefined}
-            checked={permissions.mouse_keyboard}
-            disabled={!request.policy_ceilings.allow_mouse_keyboard}
-            onChange={(checked) =>
-              setPermissions((prev) => ({ ...prev, mouse_keyboard: checked }))
-            }
-          />
-          <PermissionSwitchRow
-            id="perm-clipboard"
-            label="Clipboard"
-            note={!request.policy_ceilings.allow_clipboard_sync ? "Off by policy" : undefined}
-            checked={permissions.clipboard_sync}
-            disabled={!request.policy_ceilings.allow_clipboard_sync}
-            onChange={(checked) =>
-              setPermissions((prev) => ({ ...prev, clipboard_sync: checked }))
-            }
-          />
-          <PermissionSwitchRow
-            id="perm-file-transfer"
-            label="File transfer"
-            note={!request.policy_ceilings.allow_file_transfer ? "Off by policy" : undefined}
-            checked={permissions.file_transfer}
-            disabled={!request.policy_ceilings.allow_file_transfer}
-            onChange={(checked) =>
-              setPermissions((prev) => ({ ...prev, file_transfer: checked }))
-            }
-          />
-        </div>
-      </fieldset>
-
-      <fieldset className="flex flex-1 items-center justify-between gap-3 border-b border-[#DADDD8] bg-white px-5 py-2.5">
-        <legend className="sr-only">Access duration</legend>
-        <span className="text-[13px] font-medium text-[#111618]" aria-hidden="true">
-          Access duration
-        </span>
-        <div className="inline-grid grid-cols-2 rounded-md border border-[#DADDD8] bg-[#F5F6F4] p-0.5 text-xs font-medium">
-          <label
-            className={`cursor-pointer rounded-[4px] px-3 py-1 text-center transition-colors ${
-              duration === "this_session"
-                ? "bg-white font-semibold text-[#111618] shadow-2xs"
-                : "text-[#525D63] hover:text-[#111618]"
-            }`}
-          >
-            <input
-              type="radio"
-              name="grant-duration"
-              value="this_session"
-              checked={duration === "this_session"}
-              onChange={() => setDuration("this_session")}
-              className="sr-only"
+      <div
+        data-testid="consent-scrollable-body"
+        className="min-h-0 flex-1 overflow-y-auto bg-white"
+      >
+        <fieldset className="border-b border-[#DADDD8] bg-white">
+          <legend className="sr-only">Permissions for this session</legend>
+          <div className="divide-y divide-[#DADDD8]">
+            <PermissionSwitchRow
+              id="perm-view-screen"
+              label="See your screen"
+              note="Required"
+              checked
+              disabled
+              lockedOn
             />
-            <span>This session</span>
-          </label>
-          <label
-            className={`cursor-pointer rounded-[4px] px-3 py-1 text-center transition-colors ${
-              duration === "one_hour"
-                ? "bg-white font-semibold text-[#111618] shadow-2xs"
-                : "text-[#525D63] hover:text-[#111618]"
-            }`}
-          >
-            <input
-              type="radio"
-              name="grant-duration"
-              value="one_hour"
-              checked={duration === "one_hour"}
-              onChange={() => setDuration("one_hour")}
-              className="sr-only"
+            <PermissionSwitchRow
+              id="perm-mouse-keyboard"
+              label="Mouse & keyboard"
+              note={!request.policy_ceilings.allow_mouse_keyboard ? "Off by policy" : undefined}
+              checked={permissions.mouse_keyboard}
+              disabled={!request.policy_ceilings.allow_mouse_keyboard}
+              onChange={(checked) =>
+                setPermissions((prev) => ({ ...prev, mouse_keyboard: checked }))
+              }
             />
-            <span>1 hour</span>
-          </label>
-        </div>
-      </fieldset>
+            <PermissionSwitchRow
+              id="perm-clipboard"
+              label="Clipboard"
+              note={!request.policy_ceilings.allow_clipboard_sync ? "Off by policy" : undefined}
+              checked={permissions.clipboard_sync}
+              disabled={!request.policy_ceilings.allow_clipboard_sync}
+              onChange={(checked) =>
+                setPermissions((prev) => ({ ...prev, clipboard_sync: checked }))
+              }
+            />
+            <PermissionSwitchRow
+              id="perm-file-transfer"
+              label="File transfer"
+              note={!request.policy_ceilings.allow_file_transfer ? "Off by policy" : undefined}
+              checked={permissions.file_transfer}
+              disabled={!request.policy_ceilings.allow_file_transfer}
+              onChange={(checked) =>
+                setPermissions((prev) => ({ ...prev, file_transfer: checked }))
+              }
+            />
+          </div>
+        </fieldset>
 
-      {errorMessage && (
-        <p
-          role="alert"
-          className="border-b border-[#B42318]/30 bg-[#FEE4E2] px-5 py-2 text-xs font-medium text-[#912018]"
-        >
-          {errorMessage}
-        </p>
-      )}
+        <fieldset className="flex items-center justify-between gap-3 border-b border-[#DADDD8] bg-white px-4 py-2.5 sm:px-5">
+          <legend className="sr-only">Access duration</legend>
+          <span className="text-[13px] font-medium text-[#111618]" aria-hidden="true">
+            Access duration
+          </span>
+          <div className="inline-grid shrink-0 grid-cols-2 rounded-md border border-[#DADDD8] bg-[#F5F6F4] p-0.5 text-xs font-medium">
+            <label
+              className={`cursor-pointer whitespace-nowrap rounded-[4px] px-3 py-1 text-center transition-colors ${
+                duration === "this_session"
+                  ? "bg-white font-semibold text-[#111618] shadow-2xs"
+                  : "text-[#525D63] hover:text-[#111618]"
+              }`}
+            >
+              <input
+                type="radio"
+                name="grant-duration"
+                value="this_session"
+                checked={duration === "this_session"}
+                onChange={() => setDuration("this_session")}
+                className="sr-only"
+              />
+              <span>This session</span>
+            </label>
+            <label
+              className={`cursor-pointer whitespace-nowrap rounded-[4px] px-3 py-1 text-center transition-colors ${
+                duration === "one_hour"
+                  ? "bg-white font-semibold text-[#111618] shadow-2xs"
+                  : "text-[#525D63] hover:text-[#111618]"
+              }`}
+            >
+              <input
+                type="radio"
+                name="grant-duration"
+                value="one_hour"
+                checked={duration === "one_hour"}
+                onChange={() => setDuration("one_hour")}
+                className="sr-only"
+              />
+              <span>1 hour</span>
+            </label>
+          </div>
+        </fieldset>
 
-      <footer className="bg-[#F5F6F4] px-5 py-3">
+        {errorMessage && (
+          <p
+            role="alert"
+            className="border-b border-[#B42318]/30 bg-[#FEE4E2] px-4 py-2 text-xs font-medium text-[#912018] sm:px-5"
+          >
+            {errorMessage}
+          </p>
+        )}
+      </div>
+
+      <footer
+        data-testid="consent-action-footer"
+        className="shrink-0 border-t border-[#DADDD8] bg-[#F5F6F4] px-4 py-2.5 sm:px-5 sm:py-3"
+      >
         <div className="grid grid-cols-2 gap-3">
           <button
             type="button"

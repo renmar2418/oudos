@@ -189,16 +189,16 @@ export const ActiveSessionScreen: React.FC<ActiveSessionScreenProps> = ({
   return (
     <section
       aria-labelledby="active-session-heading"
-      className="flex flex-1 flex-col bg-[#0E1214] text-white"
+      className="flex min-w-0 flex-1 flex-col bg-[#0E1214] text-white"
     >
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[#252F34] bg-[#0E1214] px-4 py-2.5 sm:px-6">
-        <div className="flex min-w-0 flex-wrap items-center gap-3">
-          <span className="inline-flex items-center gap-1.5 font-mono-code text-xs font-semibold text-[#5FD9BF]">
+        <div className="flex w-full min-w-0 flex-col gap-1 sm:w-auto sm:flex-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+          <span className="inline-flex shrink-0 items-center gap-1.5 font-mono-code text-xs font-semibold text-[#5FD9BF]">
             <span className="h-2 w-2 rounded-full bg-[#5FD9BF]" aria-hidden="true" />
             <Lock className="h-3.5 w-3.5" aria-hidden="true" />
             E2E Encrypted · {session.hostOfflineMidSession ? "Paused" : "Live"}
           </span>
-          <span className="hidden h-4 w-px bg-[#252F34] sm:inline-block" aria-hidden="true" />
+          <span className="hidden h-4 w-px bg-[#252F34] lg:inline-block" aria-hidden="true" />
           <div className="min-w-0">
             <h1
               id="active-session-heading"
@@ -213,7 +213,7 @@ export const ActiveSessionScreen: React.FC<ActiveSessionScreenProps> = ({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex shrink-0 flex-wrap items-center gap-2.5">
           <span
             className="font-mono-code text-xs font-semibold text-[#5FD9BF]"
             aria-label="Connection latency"
@@ -228,7 +228,7 @@ export const ActiveSessionScreen: React.FC<ActiveSessionScreenProps> = ({
             id="quality-select"
             value={quality}
             onChange={(e) => setQuality(e.target.value as QualityPreset)}
-            className="rounded-md border border-[#2E383D] bg-[#141D20] px-2.5 py-1.5 text-xs font-medium text-white focus:border-[#5FD9BF] focus:outline-none focus:ring-2 focus:ring-[#5FD9BF]/40"
+            className="min-h-[40px] rounded-md border border-[#2E383D] bg-[#141D20] px-2.5 py-1.5 text-xs font-medium text-white focus:border-[#5FD9BF] focus:outline-none focus:ring-2 focus:ring-[#5FD9BF]/40 sm:min-h-[34px]"
           >
             <option value="Auto">Quality: Auto</option>
             <option value="Sharp">Quality: Sharp</option>
@@ -242,7 +242,7 @@ export const ActiveSessionScreen: React.FC<ActiveSessionScreenProps> = ({
                 session.hostOfflineMidSession ? "Host went offline" : "You ended the session"
               )
             }
-            className="inline-flex min-h-[34px] items-center gap-1.5 rounded-md bg-[#B42318] px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#912018] focus:outline-none focus:ring-2 focus:ring-white"
+            className="inline-flex min-h-[40px] items-center gap-1.5 rounded-md bg-[#B42318] px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#912018] focus:outline-none focus:ring-2 focus:ring-white sm:min-h-[34px]"
           >
             <PhoneOff className="h-3.5 w-3.5" aria-hidden="true" />
             End
@@ -260,8 +260,8 @@ export const ActiveSessionScreen: React.FC<ActiveSessionScreenProps> = ({
         </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#252F34] bg-[#141D20] px-4 py-1.5 sm:px-6">
-        <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#252F34] bg-[#141D20] px-4 py-2 sm:px-6 sm:py-1.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           <span className="mr-1 inline-flex items-center gap-1 text-xs font-medium text-[#A8B4B0]">
             <Command className="h-3.5 w-3.5" aria-hidden="true" />
             Send Shortcuts:
@@ -272,7 +272,7 @@ export const ActiveSessionScreen: React.FC<ActiveSessionScreenProps> = ({
               type="button"
               disabled={!perms.mouseKeyboard || Boolean(session.hostOfflineMidSession)}
               onClick={() => sendShortcut(shortcut)}
-              className="rounded border border-[#2E383D] bg-[#1C2327] px-2.5 py-1 font-mono-code text-xs text-white transition-colors hover:border-[#5FD9BF] focus:outline-none focus:ring-2 focus:ring-[#5FD9BF] disabled:cursor-not-allowed disabled:opacity-45"
+              className="min-h-[40px] rounded border border-[#2E383D] bg-[#1C2327] px-2.5 py-1 font-mono-code text-xs text-white transition-colors hover:border-[#5FD9BF] focus:outline-none focus:ring-2 focus:ring-[#5FD9BF] disabled:cursor-not-allowed disabled:opacity-45 sm:min-h-[30px]"
             >
               {shortcut}
             </button>
@@ -289,7 +289,7 @@ export const ActiveSessionScreen: React.FC<ActiveSessionScreenProps> = ({
           role="switch"
           aria-checked={showRemoteCursor}
           onClick={() => setShowRemoteCursor((prev) => !prev)}
-          className="inline-flex items-center gap-2 rounded border border-[#2E383D] bg-[#1C2327] px-2.5 py-1 text-xs font-medium text-white transition-colors hover:border-[#5FD9BF] focus:outline-none focus:ring-2 focus:ring-[#5FD9BF]"
+          className="inline-flex min-h-[40px] items-center gap-2 rounded border border-[#2E383D] bg-[#1C2327] px-2.5 py-1 text-xs font-medium text-white transition-colors hover:border-[#5FD9BF] focus:outline-none focus:ring-2 focus:ring-[#5FD9BF] sm:min-h-[30px]"
         >
           <MousePointer className="h-3.5 w-3.5 text-[#5FD9BF]" aria-hidden="true" />
           <span>Remote cursor</span>
@@ -299,11 +299,11 @@ export const ActiveSessionScreen: React.FC<ActiveSessionScreenProps> = ({
         </button>
       </div>
 
-      <div className="grid flex-1 lg:grid-cols-[1fr_300px]">
+      <div className="grid min-w-0 flex-1 lg:grid-cols-[minmax(0,1fr)_300px]">
         {session.hostOfflineMidSession ? (
           <div
             role="alert"
-            className="flex min-h-[340px] flex-col items-center justify-center bg-[#090C0D] p-8 text-center"
+            className="flex min-h-[260px] min-w-0 flex-col items-center justify-center bg-[#090C0D] p-6 text-center sm:min-h-[360px] sm:p-8 lg:min-h-[460px]"
           >
             <div className="flex h-12 w-12 items-center justify-center rounded-md border border-[#FDB022]/40 bg-[#2A1B0E] text-[#FDB022]">
               <WifiOff className="h-6 w-6" aria-hidden="true" />
@@ -323,7 +323,7 @@ export const ActiveSessionScreen: React.FC<ActiveSessionScreenProps> = ({
                 <button
                   type="button"
                   onClick={onRecheckHost}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-[#2E383D] bg-[#141D20] px-4 py-2 text-xs font-medium text-white hover:border-[#5FD9BF]"
+                  className="inline-flex min-h-[40px] items-center gap-1.5 rounded-md border border-[#2E383D] bg-[#141D20] px-4 py-2 text-xs font-medium text-white hover:border-[#5FD9BF] sm:min-h-[34px]"
                 >
                   <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
                   Check reconnection
@@ -332,14 +332,14 @@ export const ActiveSessionScreen: React.FC<ActiveSessionScreenProps> = ({
               <button
                 type="button"
                 onClick={() => onEndSession("Host went offline")}
-                className="rounded-md bg-[#B42318] px-4 py-2 text-xs font-semibold text-white hover:bg-[#912018]"
+                className="min-h-[40px] rounded-md bg-[#B42318] px-4 py-2 text-xs font-semibold text-white hover:bg-[#912018] sm:min-h-[34px]"
               >
                 End session &amp; view summary
               </button>
             </div>
           </div>
         ) : (
-          <div className="flex min-h-[340px] flex-col items-center justify-center bg-[#090C0D] p-8 text-center">
+          <div className="flex min-h-[260px] min-w-0 flex-col items-center justify-center bg-[#090C0D] p-6 text-center sm:min-h-[360px] sm:p-8 lg:min-h-[460px]">
             <Monitor className="h-11 w-11 text-[#5FD9BF]" aria-hidden="true" />
             <p className="mt-4 text-sm font-medium text-white">
               Remote desktop stream viewport ({quality} mode · 1080p@30fps)
@@ -352,9 +352,9 @@ export const ActiveSessionScreen: React.FC<ActiveSessionScreenProps> = ({
 
         <aside
           aria-label="Session details and local controls"
-          className="divide-y divide-[#252F34] border-t border-[#252F34] bg-[#13181B] text-xs lg:border-l lg:border-t-0"
+          className="grid min-w-0 divide-y divide-[#252F34] border-t border-[#252F34] bg-[#13181B] text-xs md:grid-cols-2 md:divide-x md:divide-y-0 lg:block lg:divide-x-0 lg:divide-y lg:border-l lg:border-t-0"
         >
-          <div className="p-4">
+          <div className="p-4 md:row-span-2 lg:row-span-1">
             <h2 className="text-xs font-semibold text-[#A8B4B0]">Session details</h2>
             <dl className="mt-3 space-y-2">
               <div className="flex items-baseline justify-between gap-2">
@@ -425,7 +425,7 @@ export const ActiveSessionScreen: React.FC<ActiveSessionScreenProps> = ({
             </div>
           </div>
 
-          <div className="p-4 text-[#C4CCC8]">
+          <div className="p-4 text-[#C4CCC8] md:border-t-0 lg:border-t">
             <div className="flex items-center justify-between gap-2">
               <span className="inline-flex items-center gap-1.5 font-semibold text-white">
                 <Clipboard className="h-3.5 w-3.5 text-[#5FD9BF]" aria-hidden="true" />
@@ -451,7 +451,7 @@ export const ActiveSessionScreen: React.FC<ActiveSessionScreenProps> = ({
                   onChange={(e) =>
                     setClipboardDirection(e.target.value as ClipboardDirection)
                   }
-                  className="w-full rounded border border-[#2E383D] bg-[#0E1214] px-2.5 py-1.5 text-xs text-white focus:border-[#5FD9BF] focus:outline-none"
+                  className="min-h-[40px] w-full rounded border border-[#2E383D] bg-[#0E1214] px-2.5 py-1.5 text-xs text-white focus:border-[#5FD9BF] focus:outline-none lg:min-h-[32px]"
                 >
                   <option value="host_to_viewer">Host to viewer only</option>
                   <option value="viewer_to_host">Viewer to host only</option>
@@ -472,7 +472,7 @@ export const ActiveSessionScreen: React.FC<ActiveSessionScreenProps> = ({
                     clipboardDirection === "host_to_viewer" ||
                     Boolean(session.hostOfflineMidSession)
                   }
-                  className="w-full rounded border border-[#2E383D] bg-[#0E1214] px-2.5 py-1.5 text-xs text-white placeholder-[#8A938E] focus:border-[#5FD9BF] focus:outline-none disabled:opacity-50"
+                  className="min-h-[40px] w-full rounded border border-[#2E383D] bg-[#0E1214] px-2.5 py-1.5 text-xs text-white placeholder-[#8A938E] focus:border-[#5FD9BF] focus:outline-none disabled:opacity-50 lg:min-h-[32px]"
                 />
                 <button
                   type="button"
@@ -482,7 +482,7 @@ export const ActiveSessionScreen: React.FC<ActiveSessionScreenProps> = ({
                     clipboardDirection === "host_to_viewer" ||
                     Boolean(session.hostOfflineMidSession)
                   }
-                  className="w-full rounded bg-[#0F5C52] px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-[#0B473F] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="min-h-[40px] w-full rounded bg-[#0F5C52] px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-[#0B473F] disabled:cursor-not-allowed disabled:opacity-50 lg:min-h-[32px]"
                 >
                   Send clipboard text
                 </button>
@@ -499,7 +499,7 @@ export const ActiveSessionScreen: React.FC<ActiveSessionScreenProps> = ({
             )}
           </div>
 
-          <div className="p-4 text-[#C4CCC8]">
+          <div className="p-4 text-[#C4CCC8] md:border-t lg:border-t">
             <div className="flex items-center justify-between gap-2">
               <span className="inline-flex items-center gap-1.5 font-semibold text-white">
                 <FileUp className="h-3.5 w-3.5 text-[#5FD9BF]" aria-hidden="true" />

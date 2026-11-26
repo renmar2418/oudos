@@ -255,4 +255,17 @@ describe("Oudos web-pwa screens, edge states & accessibility", () => {
 
     await expectZeroAxeViolations(container);
   });
+
+  it("formats offline timestamps cleanly in UTC with semantic <time> title preservation and renders balanced support-link empty state", async () => {
+    const { transport } = createMemoryTransport();
+    const { container } = render(<App transport={transport} />);
+
+    expect(screen.getByText("No active support links")).toBeInTheDocument();
+    const offlineTime = container.querySelector('time[dateTime="2026-11-24T22:45:00Z"]');
+    expect(offlineTime).not.toBeNull();
+    expect(offlineTime).toHaveTextContent("Last seen Nov 24, 22:45 UTC");
+    expect(offlineTime).toHaveAttribute("title", "2026-11-24T22:45:00Z");
+
+    await expectZeroAxeViolations(container);
+  });
 });

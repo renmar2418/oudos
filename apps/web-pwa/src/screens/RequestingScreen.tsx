@@ -107,7 +107,7 @@ export const RequestingScreen: React.FC<RequestingScreenProps> = ({
 
       <div className="bg-[#F5F6F4] px-6 py-5 text-center">
         <p
-          className="font-mono-code text-4xl font-semibold tracking-[0.16em] text-[#111618]"
+          className="font-mono-code text-3xl font-semibold tracking-[0.14em] text-[#111618] sm:text-4xl sm:tracking-[0.16em]"
           aria-label={`Verification code ${sasCode}`}
         >
           {sasCode}

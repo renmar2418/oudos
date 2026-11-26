@@ -111,7 +111,7 @@ export const AddDeviceWizard: React.FC<AddDeviceWizardProps> = ({
       aria-modal="true"
       aria-labelledby="add-device-wizard-title"
     >
-      <div className="w-full max-w-xl border border-[#DADDD8] bg-white shadow-xl">
+      <div className="max-h-[calc(100vh-2rem)] w-full max-w-xl overflow-y-auto border border-[#DADDD8] bg-white shadow-xl">
         <div className="flex items-center justify-between gap-4 border-b border-[#DADDD8] px-6 py-4">
           <div>
             <h2

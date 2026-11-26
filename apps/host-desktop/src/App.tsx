@@ -186,12 +186,12 @@ export const App: React.FC<AppProps> = ({
       : "Ready · No active session";
 
   return (
-    <main className="mx-auto flex min-h-[660px] w-full max-w-[520px] flex-col bg-[#F5F6F4] text-[#111618]">
-      <header className="flex items-center justify-between border-b border-[#DADDD8] bg-white px-5 py-3.5">
-        <div className="flex items-center gap-2.5">
+    <main className="mx-auto flex h-screen max-h-[660px] w-full max-w-[520px] flex-col overflow-hidden bg-[#F5F6F4] text-[#111618]">
+      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-[#DADDD8] bg-white px-4 py-3 sm:px-5 sm:py-3.5">
+        <div className="flex min-w-0 items-center gap-2.5">
           <HostFacingBracketsIcon
             state={snapshot.tray_state}
-            className={`h-6 w-6 ${isAlert ? "text-[#B42318]" : "text-[#0F5C52]"}`}
+            className={`h-6 w-6 shrink-0 ${isAlert ? "text-[#B42318]" : "text-[#0F5C52]"}`}
             label={`Host status: ${snapshot.tray_state}`}
           />
           <h1 className="font-display text-lg font-semibold tracking-[-0.02em] text-[#111618]">
@@ -199,19 +199,19 @@ export const App: React.FC<AppProps> = ({
           </h1>
         </div>
 
-        <div className="flex items-center gap-2 text-xs font-medium text-[#525D63]">
+        <div className="flex shrink-0 items-center gap-2 text-xs font-medium text-[#525D63]">
           <span
             aria-hidden="true"
             className={`h-2 w-2 rounded-full ${
               isAlert ? "bg-[#B42318]" : "bg-[#0F5C52]"
             }`}
           />
-          <span>{statusText}</span>
+          <span className="whitespace-nowrap">{statusText}</span>
         </div>
       </header>
 
       {snapshot.active_banner ? (
-        <section className="border-b border-[#DADDD8] bg-[#0E1214]">
+        <section className="shrink-0 border-b border-[#DADDD8] bg-[#0E1214]">
           <PersistentSessionBanner
             banner={snapshot.active_banner}
             onEndSession={handleEndSession}
@@ -221,7 +221,7 @@ export const App: React.FC<AppProps> = ({
       ) : (
         <section
           aria-labelledby="idle-state-heading"
-          className="border-b border-[#DADDD8] bg-white px-5 py-5"
+          className="shrink-0 border-b border-[#DADDD8] bg-white px-4 py-4 sm:px-5 sm:py-5"
         >
           <h2
             id="idle-state-heading"
@@ -238,40 +238,40 @@ export const App: React.FC<AppProps> = ({
 
       <section
         aria-label="How every connection works"
-        className="flex flex-1 flex-col border-b border-[#DADDD8] bg-white"
+        className="flex min-h-0 flex-1 flex-col border-b border-[#DADDD8] bg-white"
       >
-        <div className="border-b border-[#DADDD8] bg-[#F5F6F4] px-5 py-2.5">
+        <div className="shrink-0 border-b border-[#DADDD8] bg-[#F5F6F4] px-4 py-2 sm:px-5 sm:py-2.5">
           <h2 className="text-xs font-semibold text-[#525D63]">
             How this computer stays protected
           </h2>
         </div>
 
-        <ol className="flex flex-1 flex-col justify-between divide-y divide-[#DADDD8] text-sm">
-          <li className="px-5 py-2.5">
+        <ol className="flex min-h-0 flex-1 flex-col justify-between divide-y divide-[#DADDD8] overflow-y-auto text-sm">
+          <li className="px-4 py-2.5 sm:px-5">
             <p className="font-semibold text-[#111618]">Approval required</p>
             <p className="mt-0.5 text-xs text-[#525D63]">
               Every connection prompts on this screen before anything is shared.
             </p>
           </li>
-          <li className="px-5 py-2.5">
+          <li className="px-4 py-2.5 sm:px-5">
             <p className="font-semibold text-[#111618]">6-digit code check</p>
             <p className="mt-0.5 text-xs text-[#525D63]">
               Match the 6-digit verification code with the caller before clicking Allow.
             </p>
           </li>
-          <li className="px-5 py-2.5">
+          <li className="px-4 py-2.5 sm:px-5">
             <p className="font-semibold text-[#111618]">Screen view only by default</p>
             <p className="mt-0.5 text-xs text-[#525D63]">
               Mouse, keyboard, clipboard, and file transfer always start turned off.
             </p>
           </li>
-          <li className="px-5 py-2.5">
+          <li className="px-4 py-2.5 sm:px-5">
             <p className="font-semibold text-[#111618]">Unattended access disabled</p>
             <p className="mt-0.5 text-xs text-[#525D63]">
               Background connections cannot run when you are away from this PC.
             </p>
           </li>
-          <li className="px-5 py-2.5">
+          <li className="px-4 py-2.5 sm:px-5">
             <p className="font-semibold text-[#111618]">Instant stop control</p>
             <p className="mt-0.5 text-xs text-[#525D63]">
               A top-most bar with a red End session button stays visible during sessions.
@@ -280,7 +280,7 @@ export const App: React.FC<AppProps> = ({
         </ol>
       </section>
 
-      <footer className="bg-[#F5F6F4] px-5 py-3 text-xs text-[#525D63]">
+      <footer className="shrink-0 bg-[#F5F6F4] px-4 py-2.5 text-xs text-[#525D63] sm:px-5 sm:py-3">
         <details className="group">
           <summary className="flex cursor-pointer list-none items-center justify-between py-1 font-medium text-[#525D63] hover:text-[#111618] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C52]">
             <span>Diagnostics</span>
