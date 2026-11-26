@@ -24,7 +24,7 @@ const SCREEN_UNAVAILABLE_DETAILS: Record<
   locked: {
     title: "Screen locked on host PC",
     summary:
-      "The Windows lock screen is currently active. In v0.1 Asks-First mode, screen capture pauses at the lock screen.",
+      "The Windows lock screen is currently active. In Asks-First mode, screen capture pauses at the lock screen.",
     steps: [
       "Ask the device owner to sign in on their Windows PC.",
       "Once unlocked, click Check availability again to start the request.",
@@ -72,76 +72,70 @@ export const ScreenUnavailableCard: React.FC<{
   return (
     <section
       aria-labelledby="screen-unavailable-heading"
-      className="mx-auto max-w-xl rounded-2xl border border-[#DADDD8] bg-white p-6 shadow-xs sm:p-8"
+      className="mx-auto max-w-xl border border-[#DADDD8] bg-white divide-y divide-[#DADDD8]"
     >
-      <div className="flex items-center gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#FEF0C7] text-[#B54708]">
-          <MonitorOff className="h-6 w-6" aria-hidden="true" />
-        </div>
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-[#B54708]">
-            Screen unavailable
-          </p>
-          <h1
-            id="screen-unavailable-heading"
-            className="text-xl font-semibold text-[#14181B]"
-          >
-            {details.title}
-          </h1>
-        </div>
+      <div className="flex items-center gap-3 bg-[#FEF0C7]/60 px-6 py-4">
+        <MonitorOff className="h-5 w-5 shrink-0 text-[#B54708]" aria-hidden="true" />
+        <h1
+          id="screen-unavailable-heading"
+          className="text-lg font-semibold text-[#111618]"
+        >
+          {details.title}
+        </h1>
       </div>
 
-      <p className="mt-4 text-sm text-[#4A524E]">
-        <strong className="text-[#14181B]">{device.alias}</strong> (
-        <span className="font-mono-code">{device.deviceId}</span>) cannot share its screen right now. {details.summary}
-      </p>
+      <div className="space-y-4 px-6 py-5">
+        <p className="text-sm text-[#525D63]">
+          <strong className="text-[#111618]">{device.alias}</strong> (
+          <span className="font-mono-code">{device.deviceId}</span>) cannot share its screen right now.{" "}
+          {details.summary}
+        </p>
 
-      <div className="mt-5 rounded-xl border border-[#DADDD8] bg-[#F5F6F4] p-4">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-[#14181B]">
-          How to fix it
-        </h2>
-        <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-sm text-[#4A524E]">
-          {details.steps.map((stepText) => (
-            <li key={stepText}>{stepText}</li>
-          ))}
-        </ol>
+        <div className="border border-[#DADDD8] bg-[#F5F6F4] p-4">
+          <h2 className="text-xs font-semibold text-[#111618]">How to fix it</h2>
+          <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-sm text-[#525D63]">
+            {details.steps.map((stepText) => (
+              <li key={stepText}>{stepText}</li>
+            ))}
+          </ol>
+        </div>
+
+        {onChangeReason && (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="font-medium text-[#525D63]">Cause reported by host:</span>
+            {(["permission_missing", "locked", "asleep", "no_display"] as const).map(
+              (r) => (
+                <button
+                  key={r}
+                  type="button"
+                  aria-pressed={reason === r}
+                  onClick={() => onChangeReason(r)}
+                  className={`rounded-md border px-2.5 py-1 font-medium ${
+                    reason === r
+                      ? "border-[#B54708] bg-[#FEF0C7] text-[#7A2E0E]"
+                      : "border-[#DADDD8] bg-white text-[#525D63] hover:bg-[#F5F6F4]"
+                  }`}
+                >
+                  {r.replace("_", " ")}
+                </button>
+              )
+            )}
+          </div>
+        )}
       </div>
 
-      {onChangeReason && (
-        <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
-          <span className="font-medium text-[#4A524E]">Cause reported by host:</span>
-          {(["permission_missing", "locked", "asleep", "no_display"] as const).map(
-            (r) => (
-              <button
-                key={r}
-                type="button"
-                aria-pressed={reason === r}
-                onClick={() => onChangeReason(r)}
-                className={`rounded-full border px-2.5 py-1 font-medium ${
-                  reason === r
-                    ? "border-[#B54708] bg-[#FEF0C7] text-[#B54708]"
-                    : "border-[#DADDD8] bg-white text-[#4A524E] hover:bg-[#F5F6F4]"
-                }`}
-              >
-                {r.replace("_", " ")}
-              </button>
-            )
-          )}
-        </div>
-      )}
-
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+      <div className="flex flex-col gap-3 bg-[#F5F6F4] px-6 py-4 sm:flex-row">
         <button
           type="button"
           onClick={onBack}
-          className="flex-1 rounded-lg border border-[#DADDD8] bg-white px-4 py-2.5 text-sm font-medium text-[#14181B] hover:bg-[#F5F6F4] focus:outline-none focus:ring-2 focus:ring-[#0F7B6C]"
+          className="flex-1 rounded-md border border-[#DADDD8] bg-white px-4 py-2.5 text-sm font-medium text-[#111618] hover:bg-[#F5F6F4] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C52]"
         >
           Back to Devices
         </button>
         <button
           type="button"
           onClick={onRetry}
-          className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-[#0F7B6C] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#0A6457] focus:outline-none focus:ring-2 focus:ring-[#0F7B6C]"
+          className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-[#0F5C52] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#0B473F] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C52]"
         >
           <RefreshCw className="h-4 w-4" aria-hidden="true" />
           Check availability again
@@ -159,36 +153,31 @@ export const OwnerDeniedCard: React.FC<{
 }> = ({ device, streakCount, onRetry, onBack }) => (
   <section
     aria-labelledby="owner-denied-heading"
-    className="mx-auto max-w-lg rounded-2xl border border-[#DADDD8] bg-white p-6 shadow-xs sm:p-8"
+    className="mx-auto max-w-lg border border-[#DADDD8] bg-white divide-y divide-[#DADDD8]"
   >
-    <div className="flex items-center gap-3">
-      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#FEE4E2] text-[#B42318]">
-        <XCircle className="h-6 w-6" aria-hidden="true" />
-      </div>
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wider text-[#B42318]">
-          Access declined
-        </p>
-        <h1 id="owner-denied-heading" className="text-xl font-semibold text-[#14181B]">
-          {device.ownerName} denied the connection request
-        </h1>
+    <div className="flex items-center gap-3 bg-[#FEE4E2]/70 px-6 py-4">
+      <XCircle className="h-5 w-5 shrink-0 text-[#B42318]" aria-hidden="true" />
+      <h1 id="owner-denied-heading" className="text-lg font-semibold text-[#111618]">
+        {device.ownerName} denied the connection request
+      </h1>
+    </div>
+
+    <div className="space-y-4 px-6 py-5">
+      <p className="text-sm text-[#525D63]">
+        Your request to <strong className="text-[#111618]">{device.alias}</strong> (
+        <span className="font-mono-code">{device.deviceId}</span>) was declined by the owner. No screen frames, input, or clipboard data were shared, and the denial was recorded in the audit log.
+      </p>
+
+      <div className="border border-[#DADDD8] bg-[#F5F6F4] p-3.5 text-xs text-[#525D63]">
+        Anti-abuse protection: 3 consecutive denials or mismatches lock further requests to this device for 24 hours (current streak: {streakCount} of 3).
       </div>
     </div>
 
-    <p className="mt-4 text-sm text-[#4A524E]">
-      Your request to <strong className="text-[#14181B]">{device.alias}</strong> (
-      <span className="font-mono-code">{device.deviceId}</span>) was declined by the owner. No screen frames, input, or clipboard data were shared, and the denial was recorded in the audit log.
-    </p>
-
-    <div className="mt-4 rounded-xl border border-[#DADDD8] bg-[#F5F6F4] p-3.5 text-xs text-[#4A524E]">
-      Anti-abuse protection: 3 consecutive denials or mismatches lock further requests to this device for 24 hours (current streak: {streakCount} of 3).
-    </div>
-
-    <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+    <div className="flex flex-col gap-3 bg-[#F5F6F4] px-6 py-4 sm:flex-row">
       <button
         type="button"
         onClick={onBack}
-        className="flex-1 rounded-lg border border-[#DADDD8] bg-white px-4 py-2.5 text-sm font-medium text-[#14181B] hover:bg-[#F5F6F4]"
+        className="flex-1 rounded-md border border-[#DADDD8] bg-white px-4 py-2.5 text-sm font-medium text-[#111618] hover:bg-[#F5F6F4]"
       >
         Back to Devices
       </button>
@@ -196,7 +185,7 @@ export const OwnerDeniedCard: React.FC<{
         type="button"
         disabled={streakCount >= 3}
         onClick={onRetry}
-        className="flex-1 rounded-lg bg-[#0F7B6C] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#0A6457] disabled:cursor-not-allowed disabled:bg-[#DADDD8] disabled:text-[#4A524E]"
+        className="flex-1 rounded-md bg-[#0F5C52] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#0B473F] disabled:cursor-not-allowed disabled:bg-[#DCE0DC] disabled:text-[#384146]"
       >
         {streakCount >= 3 ? "Locked out (24h)" : "Request again"}
       </button>
@@ -211,38 +200,33 @@ export const RequestExpiredCard: React.FC<{
 }> = ({ device, onRetry, onBack }) => (
   <section
     aria-labelledby="request-expired-heading"
-    className="mx-auto max-w-lg rounded-2xl border border-[#DADDD8] bg-white p-6 shadow-xs sm:p-8"
+    className="mx-auto max-w-lg border border-[#DADDD8] bg-white divide-y divide-[#DADDD8]"
   >
-    <div className="flex items-center gap-3">
-      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#FEF0C7] text-[#B54708]">
-        <Clock className="h-6 w-6" aria-hidden="true" />
-      </div>
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wider text-[#B54708]">
-          2-minute timeout
-        </p>
-        <h1 id="request-expired-heading" className="text-xl font-semibold text-[#14181B]">
-          Request expired after 2 minutes
-        </h1>
-      </div>
+    <div className="flex items-center gap-3 bg-[#FEF0C7]/60 px-6 py-4">
+      <Clock className="h-5 w-5 shrink-0 text-[#B54708]" aria-hidden="true" />
+      <h1 id="request-expired-heading" className="text-lg font-semibold text-[#111618]">
+        Request expired after 2 minutes
+      </h1>
     </div>
 
-    <p className="mt-4 text-sm text-[#4A524E]">
-      {device.ownerName} did not approve within the 2-minute window, so the request closed automatically and nothing was shared.
-    </p>
+    <div className="px-6 py-5">
+      <p className="text-sm text-[#525D63]">
+        {device.ownerName} did not approve within the 2-minute window, so the request closed automatically and nothing was shared.
+      </p>
+    </div>
 
-    <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+    <div className="flex flex-col gap-3 bg-[#F5F6F4] px-6 py-4 sm:flex-row">
       <button
         type="button"
         onClick={onBack}
-        className="flex-1 rounded-lg border border-[#DADDD8] bg-white px-4 py-2.5 text-sm font-medium text-[#14181B] hover:bg-[#F5F6F4]"
+        className="flex-1 rounded-md border border-[#DADDD8] bg-white px-4 py-2.5 text-sm font-medium text-[#111618] hover:bg-[#F5F6F4]"
       >
         Back to Devices
       </button>
       <button
         type="button"
         onClick={onRetry}
-        className="flex-1 rounded-lg bg-[#0F7B6C] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#0A6457]"
+        className="flex-1 rounded-md bg-[#0F5C52] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#0B473F]"
       >
         Send new request
       </button>
@@ -258,35 +242,30 @@ export const CodeMismatchCard: React.FC<{
   <section
     aria-labelledby="code-mismatch-heading"
     role="alert"
-    className="mx-auto max-w-lg rounded-2xl border border-[#B42318]/40 bg-white p-6 shadow-xs sm:p-8"
+    className="mx-auto max-w-lg border border-[#B42318] bg-white divide-y divide-[#DADDD8]"
   >
-    <div className="flex items-center gap-3">
-      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#FEE4E2] text-[#B42318]">
-        <ShieldAlert className="h-6 w-6" aria-hidden="true" />
-      </div>
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wider text-[#B42318]">
-          Security halt · SAS mismatch
-        </p>
-        <h1 id="code-mismatch-heading" className="text-xl font-semibold text-[#14181B]">
-          6-digit verification codes did not match
-        </h1>
+    <div className="flex items-center gap-3 bg-[#FEE4E2] px-6 py-4">
+      <ShieldAlert className="h-5 w-5 shrink-0 text-[#B42318]" aria-hidden="true" />
+      <h1 id="code-mismatch-heading" className="text-lg font-semibold text-[#111618]">
+        6-digit verification codes did not match
+      </h1>
+    </div>
+
+    <div className="space-y-4 px-6 py-5">
+      <p className="text-sm text-[#525D63]">
+        Connection to <strong className="text-[#111618]">{device.alias}</strong> was aborted immediately because the 6-digit verification codes did not match.
+      </p>
+
+      <div className="border border-[#B54708]/40 bg-[#FEF0C7] p-3.5 text-xs text-[#7A2E0E]">
+        <strong>Why this matters:</strong> A mismatched code can mean a relay or attacker is interfering with the handshake. Do not continue if anyone asks you to ignore a mismatched code. Repeated mismatches lock requests for 24 hours (streak: {streakCount}/3).
       </div>
     </div>
 
-    <p className="mt-4 text-sm text-[#4A524E]">
-      Connection to <strong className="text-[#14181B]">{device.alias}</strong> was aborted immediately because the locally derived 6-digit verification codes did not match.
-    </p>
-
-    <div className="mt-4 rounded-xl border border-[#B54708]/30 bg-[#FEF0C7] p-4 text-xs text-[#B54708]">
-      <strong>Why this matters:</strong> A mismatched code can mean a relay or attacker is interfering with the handshake. Do not continue if anyone asks you to ignore a mismatched code. Repeated mismatches lock requests for 24 hours (streak: {streakCount}/3).
-    </div>
-
-    <div className="mt-6">
+    <div className="bg-[#F5F6F4] px-6 py-4">
       <button
         type="button"
         onClick={onBack}
-        className="w-full rounded-lg bg-[#0F7B6C] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#0A6457]"
+        className="w-full rounded-md bg-[#0F5C52] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#0B473F]"
       >
         Return safely to Devices
       </button>
@@ -312,52 +291,54 @@ export const DeviceKeyChangedAlert: React.FC<{
       aria-labelledby="key-changed-heading"
       role="alertdialog"
       aria-modal="true"
-      className="mx-auto max-w-xl rounded-2xl border-2 border-[#B42318] bg-white p-6 shadow-md sm:p-8"
+      className="mx-auto max-w-xl border-2 border-[#B42318] bg-white divide-y divide-[#DADDD8]"
     >
-      <div className="flex items-start gap-3">
-        <span className="mt-0.5 text-[#B42318]">
-          <FacingBracketsIcon state="alert" className="h-8 w-8" label="Security alert" />
+      <div className="flex items-center gap-3 bg-[#FEE4E2] px-6 py-4">
+        <span className="text-[#B42318]">
+          <FacingBracketsIcon state="alert" className="h-7 w-7" label="Security alert" />
         </span>
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-[#B42318]">
-            Connection blocked · Key mismatch
-          </p>
-          <h1 id="key-changed-heading" className="mt-0.5 text-xl font-semibold text-[#14181B]">
-            Device key changed for {device.alias}
-          </h1>
-        </div>
+        <h1 id="key-changed-heading" className="text-lg font-semibold text-[#111618]">
+          Device key changed for {device.alias}
+        </h1>
       </div>
 
-      <p className="mt-4 text-sm text-[#4A524E]">
-        The cryptographic identity key presented by <strong className="text-[#14181B]">{device.alias}</strong> does not match the Ed25519 key saved when you first paired this device. Connection is halted until you verify what changed.
-      </p>
-
-      <div className="mt-4 space-y-2.5 rounded-xl border border-[#DADDD8] bg-[#F5F6F4] p-4 text-xs">
-        <div>
-          <p className="font-semibold text-[#14181B]">Saved (pinned) key:</p>
-          <p className="mt-0.5 break-all font-mono-code text-[#4A524E]">{expectedPubkey}</p>
-        </div>
-        <div>
-          <p className="font-semibold text-[#B42318]">New presented key:</p>
-          <p className="mt-0.5 break-all font-mono-code text-[#B42318]">{presentedPubkey}</p>
-        </div>
-      </div>
-
-      <div className="mt-4 rounded-xl border border-[#B54708]/30 bg-[#FEF0C7] p-3.5 text-xs text-[#B54708]">
-        <span className="inline-flex items-center gap-1.5 font-semibold">
-          <AlertTriangle className="h-4 w-4" aria-hidden="true" />
-          Check with {device.ownerName} out-of-band before continuing
-        </span>
-        <p className="mt-1">
-          A key change happens if Windows or the Oudos agent was reinstalled, OR if an attacker is impersonating the device.
+      <div className="space-y-4 px-6 py-5">
+        <p className="text-sm text-[#525D63]">
+          The cryptographic identity key presented by{" "}
+          <strong className="text-[#111618]">{device.alias}</strong> does not match the Ed25519 key saved when you first paired this device. Connection is halted until you verify what changed.
         </p>
+
+        <div className="divide-y divide-[#DADDD8] border border-[#DADDD8] bg-[#F5F6F4] text-xs">
+          <div className="p-3.5">
+            <p className="font-semibold text-[#111618]">Saved (pinned) key:</p>
+            <p className="mt-0.5 break-all font-mono-code text-[#525D63]">
+              {expectedPubkey}
+            </p>
+          </div>
+          <div className="p-3.5">
+            <p className="font-semibold text-[#B42318]">New presented key:</p>
+            <p className="mt-0.5 break-all font-mono-code text-[#B42318]">
+              {presentedPubkey}
+            </p>
+          </div>
+        </div>
+
+        <div className="border border-[#B54708]/40 bg-[#FEF0C7] p-3.5 text-xs text-[#7A2E0E]">
+          <span className="inline-flex items-center gap-1.5 font-semibold">
+            <AlertTriangle className="h-4 w-4 text-[#B54708]" aria-hidden="true" />
+            Check with {device.ownerName} out-of-band before continuing
+          </span>
+          <p className="mt-1">
+            A key change happens if Windows or the Oudos agent was reinstalled, OR if an attacker is impersonating the device.
+          </p>
+        </div>
       </div>
 
-      <div className="mt-6 space-y-3">
+      <div className="space-y-3 bg-[#F5F6F4] px-6 py-4">
         <button
           type="button"
           onClick={onBack}
-          className="w-full rounded-lg bg-[#B42318] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#912018] focus:outline-none focus:ring-2 focus:ring-[#B42318]"
+          className="w-full rounded-md bg-[#B42318] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#912018] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B42318]"
         >
           Keep blocked &amp; return to Devices
         </button>
@@ -366,15 +347,15 @@ export const DeviceKeyChangedAlert: React.FC<{
           <button
             type="button"
             onClick={() => setShowRecovery(true)}
-            className="w-full rounded-lg border border-[#DADDD8] bg-white px-4 py-2 text-xs font-medium text-[#4A524E] hover:bg-[#F5F6F4] hover:text-[#14181B]"
+            className="w-full rounded-md border border-[#DADDD8] bg-white px-4 py-2 text-xs font-medium text-[#525D63] hover:bg-[#F5F6F4] hover:text-[#111618]"
           >
             I verified this key change directly with {device.ownerName}
           </button>
         ) : (
-          <div className="rounded-xl border border-[#DADDD8] bg-[#F5F6F4] p-4 space-y-3">
+          <div className="space-y-3 border border-[#DADDD8] bg-white p-4">
             <label
               htmlFor="repin-confirm-id"
-              className="block text-xs font-semibold text-[#14181B]"
+              className="block text-xs font-semibold text-[#111618]"
             >
               Type the 9-digit Device ID ({device.deviceId}) to accept &amp; re-pin the new key
             </label>
@@ -384,13 +365,13 @@ export const DeviceKeyChangedAlert: React.FC<{
               value={confirmDigits}
               onChange={(e) => setConfirmDigits(e.target.value)}
               placeholder={device.deviceId}
-              className="w-full rounded-lg border border-[#DADDD8] bg-white px-3 py-2 font-mono-code text-sm text-[#14181B] focus:border-[#0F7B6C] focus:outline-none focus:ring-2 focus:ring-[#0F7B6C]"
+              className="w-full rounded-md border border-[#DADDD8] bg-white px-3 py-2 font-mono-code text-sm text-[#111618] focus:border-[#0F5C52] focus:outline-none focus:ring-2 focus:ring-[#0F5C52]"
             />
             <button
               type="button"
               disabled={!canRepin}
               onClick={() => onAcceptNewKey(presentedPubkey)}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#0F7B6C] px-4 py-2 text-sm font-medium text-white hover:bg-[#0A6457] disabled:cursor-not-allowed disabled:bg-[#DADDD8] disabled:text-[#4A524E]"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#0F5C52] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0B473F] disabled:cursor-not-allowed disabled:bg-[#DCE0DC] disabled:text-[#384146]"
             >
               <KeyRound className="h-4 w-4" aria-hidden="true" />
               Accept new key &amp; re-pin device
@@ -410,38 +391,33 @@ export const ControlPlaneOfflineCard: React.FC<{
   <section
     aria-labelledby="cp-offline-heading"
     role="alert"
-    className="mx-auto max-w-lg rounded-2xl border border-[#DADDD8] bg-white p-6 shadow-xs sm:p-8"
+    className="mx-auto max-w-lg border border-[#DADDD8] bg-white divide-y divide-[#DADDD8]"
   >
-    <div className="flex items-center gap-3">
-      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#FEF0C7] text-[#B54708]">
-        <WifiOff className="h-6 w-6" aria-hidden="true" />
-      </div>
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wider text-[#B54708]">
-          Fail-closed protection
-        </p>
-        <h1 id="cp-offline-heading" className="text-xl font-semibold text-[#14181B]">
-          Control plane unreachable
-        </h1>
-      </div>
+    <div className="flex items-center gap-3 bg-[#FEF0C7]/60 px-6 py-4">
+      <WifiOff className="h-5 w-5 shrink-0 text-[#B54708]" aria-hidden="true" />
+      <h1 id="cp-offline-heading" className="text-lg font-semibold text-[#111618]">
+        Control plane unreachable
+      </h1>
     </div>
 
-    <p className="mt-4 text-sm text-[#4A524E]">
-      Zero new sessions can start while the signaling server is offline ({reason}). Any already-active peer-to-peer sessions remain running until ended.
-    </p>
+    <div className="px-6 py-5">
+      <p className="text-sm text-[#525D63]">
+        Zero new sessions can start while the signaling server is offline ({reason}). Any already-active peer-to-peer sessions remain running until ended.
+      </p>
+    </div>
 
-    <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+    <div className="flex flex-col gap-3 bg-[#F5F6F4] px-6 py-4 sm:flex-row">
       <button
         type="button"
         onClick={onBack}
-        className="flex-1 rounded-lg border border-[#DADDD8] bg-white px-4 py-2.5 text-sm font-medium text-[#14181B] hover:bg-[#F5F6F4]"
+        className="flex-1 rounded-md border border-[#DADDD8] bg-white px-4 py-2.5 text-sm font-medium text-[#111618] hover:bg-[#F5F6F4]"
       >
         Back to Devices
       </button>
       <button
         type="button"
         onClick={onRetry}
-        className="flex-1 rounded-lg bg-[#0F7B6C] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#0A6457]"
+        className="flex-1 rounded-md bg-[#0F5C52] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#0B473F]"
       >
         Retry connection
       </button>
@@ -464,71 +440,66 @@ export const SessionEndedSummary: React.FC<{
   return (
     <section
       aria-labelledby="session-ended-heading"
-      className="mx-auto max-w-xl rounded-2xl border border-[#DADDD8] bg-white p-6 shadow-xs sm:p-8"
+      className="mx-auto max-w-xl border border-[#DADDD8] bg-white divide-y divide-[#DADDD8]"
     >
-      <div className="flex items-center gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#E3F1EE] text-[#074A40]">
-          <CheckCircle2 className="h-6 w-6" aria-hidden="true" />
-        </div>
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-[#074A40]">
-            Session ended
-          </p>
-          <h1 id="session-ended-heading" className="text-xl font-semibold text-[#14181B]">
-            Session with {session.deviceAlias} closed
-          </h1>
-        </div>
+      <div className="flex items-center gap-3 bg-[#E6F2F0]/60 px-6 py-4">
+        <CheckCircle2 className="h-5 w-5 shrink-0 text-[#0F5C52]" aria-hidden="true" />
+        <h1 id="session-ended-heading" className="text-lg font-semibold text-[#111618]">
+          Session with {session.deviceAlias} closed
+        </h1>
       </div>
 
-      <p className="mt-3 text-sm text-[#4A524E]">
-        The cryptographic grant was revoked immediately and recorded in the tamper-evident hash-chained audit log.
-      </p>
+      <div className="space-y-4 px-6 py-5">
+        <p className="text-sm text-[#525D63]">
+          The cryptographic grant was revoked immediately and recorded in the tamper-evident hash-chained audit log.
+        </p>
 
-      <dl className="mt-5 grid gap-3 rounded-xl border border-[#DADDD8] bg-[#F5F6F4] p-4 text-sm sm:grid-cols-2">
-        <div>
-          <dt className="text-xs text-[#4A524E]">End reason</dt>
-          <dd className="font-semibold text-[#14181B]">
-            {session.endReason ?? "Session ended"}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-[#4A524E]">Duration</dt>
-          <dd className="font-mono-code font-semibold text-[#14181B]">
-            {session.durationLabel}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-[#4A524E]">Connected by</dt>
-          <dd className="font-medium text-[#14181B]">{session.requester}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-[#4A524E]">Approved by</dt>
-          <dd className="font-medium text-[#14181B]">{session.approver}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-[#4A524E]">Permissions granted</dt>
-          <dd className="font-medium text-[#14181B]">{grantedList.join(" · ")}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-[#4A524E]">Audit chain record</dt>
-          <dd className="font-mono-code text-xs text-[#074A40]">
-            #{session.auditSequence ?? 0} · {(session.auditEntryHash ?? "").slice(0, 14)}…
-          </dd>
-        </div>
-      </dl>
+        <dl className="grid gap-3 border border-[#DADDD8] bg-[#F5F6F4] p-4 text-sm sm:grid-cols-2">
+          <div>
+            <dt className="text-xs text-[#525D63]">End reason</dt>
+            <dd className="font-semibold text-[#111618]">
+              {session.endReason ?? "Session ended"}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-[#525D63]">Duration</dt>
+            <dd className="font-mono-code font-semibold text-[#111618]">
+              {session.durationLabel}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-[#525D63]">Connected by</dt>
+            <dd className="font-medium text-[#111618]">{session.requester}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-[#525D63]">Approved by</dt>
+            <dd className="font-medium text-[#111618]">{session.approver}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-[#525D63]">Permissions granted</dt>
+            <dd className="font-medium text-[#111618]">{grantedList.join(" · ")}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-[#525D63]">Audit chain record</dt>
+            <dd className="font-mono-code text-xs text-[#0F5C52]">
+              #{session.auditSequence ?? 0} · {(session.auditEntryHash ?? "").slice(0, 14)}…
+            </dd>
+          </div>
+        </dl>
+      </div>
 
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+      <div className="flex flex-col gap-3 bg-[#F5F6F4] px-6 py-4 sm:flex-row">
         <button
           type="button"
           onClick={onViewAudit}
-          className="flex-1 rounded-lg border border-[#DADDD8] bg-white px-4 py-2.5 text-sm font-medium text-[#14181B] hover:bg-[#F5F6F4]"
+          className="flex-1 rounded-md border border-[#DADDD8] bg-white px-4 py-2.5 text-sm font-medium text-[#111618] hover:bg-[#F5F6F4]"
         >
           View Audit Log
         </button>
         <button
           type="button"
           onClick={onBackToDevices}
-          className="flex-1 rounded-lg bg-[#0F7B6C] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#0A6457]"
+          className="flex-1 rounded-md bg-[#0F5C52] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#0B473F]"
         >
           Back to Devices
         </button>

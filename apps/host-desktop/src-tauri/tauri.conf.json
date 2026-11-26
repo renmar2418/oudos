@@ -20,7 +20,8 @@
         "resizable": false,
         "alwaysOnTop": true,
         "center": true,
-        "visible": true
+        "visible": true,
+        "theme": "Light"
       },
       {
         "label": "banner",
@@ -33,7 +34,8 @@
         "alwaysOnTop": true,
         "closable": false,
         "skipTaskbar": true,
-        "visible": false
+        "visible": false,
+        "theme": "Dark"
       }
     ],
     "security": {

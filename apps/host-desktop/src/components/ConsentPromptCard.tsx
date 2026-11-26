@@ -23,6 +23,68 @@ function formatCountdown(secs: number): string {
   return `${mins}:${rem}`;
 }
 
+interface PermissionSwitchRowProps {
+  id: string;
+  label: string;
+  note?: string | undefined;
+  checked: boolean;
+  disabled?: boolean | undefined;
+  lockedOn?: boolean | undefined;
+  onChange?: ((checked: boolean) => void) | undefined;
+}
+
+const PermissionSwitchRow: React.FC<PermissionSwitchRowProps> = ({
+  id,
+  label,
+  note,
+  checked,
+  disabled = false,
+  lockedOn = false,
+  onChange,
+}) => (
+  <label
+    htmlFor={id}
+    className={`flex items-center justify-between gap-3 px-5 py-2 ${
+      disabled ? "cursor-default" : "cursor-pointer hover:bg-[#F5F6F4]/60"
+    }`}
+  >
+    <div className="flex min-w-0 items-baseline gap-2">
+      <span className="text-[13px] font-medium text-[#111618]">{label}</span>
+      {note && <span className="text-xs text-[#525D63]">{note}</span>}
+    </div>
+
+    <span className="relative inline-flex shrink-0 items-center">
+      <input
+        id={id}
+        type="checkbox"
+        role="switch"
+        checked={checked}
+        disabled={disabled}
+        onChange={(e) => onChange?.(e.target.checked)}
+        className="peer sr-only"
+      />
+      <span
+        aria-hidden="true"
+        className={`h-5 w-9 rounded-full border transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-[#0F5C52] peer-focus-visible:ring-offset-1 ${
+          checked
+            ? lockedOn
+              ? "border-[#0F5C52] bg-[#0F5C52] opacity-75"
+              : "border-[#0F5C52] bg-[#0F5C52]"
+            : disabled
+              ? "border-[#DADDD8] bg-[#E8EBE7]"
+              : "border-[#B8BFBA] bg-[#D5DAD6]"
+        }`}
+      />
+      <span
+        aria-hidden="true"
+        className={`pointer-events-none absolute left-0.5 h-4 w-4 rounded-full bg-white shadow-2xs transition-transform ${
+          checked ? "translate-x-4" : "translate-x-0"
+        }`}
+      />
+    </span>
+  </label>
+);
+
 export const ConsentPromptCard: React.FC<ConsentPromptCardProps> = ({
   request,
   submitting = false,
@@ -53,7 +115,7 @@ export const ConsentPromptCard: React.FC<ConsentPromptCardProps> = ({
     setDuration(request.duration);
     setCoolingRemaining(request.cooling_off_remaining_secs);
     setTtlRemaining(request.ttl_remaining_secs);
-  }, [request.session_id]);
+  }, [request.session_id, request.duration, request.cooling_off_remaining_secs, request.ttl_remaining_secs]);
 
   useEffect(() => {
     setCoolingRemaining(request.cooling_off_remaining_secs);
@@ -74,213 +136,217 @@ export const ConsentPromptCard: React.FC<ConsentPromptCardProps> = ({
   return (
     <main
       aria-labelledby="consent-card-heading"
-      className="mx-auto flex min-h-[660px] w-[520px] max-w-full flex-col justify-between border border-[#DADDD8] bg-[#F5F6F4] p-5 text-[#14181B]"
+      className="mx-auto flex min-h-[660px] w-full max-w-[520px] flex-col bg-white text-[#111618]"
     >
-      <div className="space-y-3.5">
-        <header className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <HostFacingBracketsIcon
-              state="idle"
-              className="h-6 w-6 text-[#14181B]"
-              label="Oudos waiting for your decision"
-            />
-            <span className="font-display text-base font-semibold tracking-[-0.02em] text-[#14181B]">
-              Oudos
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {request.server_enrolled ? (
-              <span
-                data-testid="server-domain-chip"
-                className="inline-flex items-center gap-1.5 rounded-full border border-[#0F7B6C]/30 bg-[#E3F1EE] px-3 py-1 text-sm font-medium text-[#074A40]"
-              >
-                <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                <span>{request.server_domain}</span>
-              </span>
-            ) : (
-              <span
-                data-testid="server-domain-chip"
-                className="inline-flex items-center gap-1.5 rounded-full border border-[#B54708]/40 bg-[#FEF0C7] px-3 py-1 text-sm font-medium text-[#B54708]"
-              >
-                <ShieldAlert className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                <span>{request.server_domain} · Personal / Unverified</span>
-              </span>
-            )}
-          </div>
-        </header>
-
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h1 id="consent-card-heading" className="font-display text-xl font-semibold text-[#14181B]">
-              <span data-testid="consent-requester-name" className="break-words">
-                &ldquo;{request.requester_name}&rdquo;
-              </span>{" "}
-              wants to see your screen
-            </h1>
-            <p className="mt-1 text-sm text-[#4A524E]">
-              Nothing is shared until you click Allow. You can end this session at any time.
-            </p>
-          </div>
-          <span
-            className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-[#DADDD8] bg-white px-2.5 py-1 font-mono-code text-sm font-medium text-[#14181B]"
-            aria-live="polite"
-            aria-label={`Request expires in ${formatCountdown(ttlRemaining)}`}
-          >
-            <Clock className="h-4 w-4 text-[#0F7B6C]" aria-hidden="true" />
-            {formatCountdown(ttlRemaining)}
+      <header className="flex items-center justify-between border-b border-[#DADDD8] bg-white px-5 py-2.5">
+        <div className="flex items-center gap-2">
+          <HostFacingBracketsIcon
+            state="idle"
+            className="h-5 w-5 text-[#0F5C52]"
+            label="Oudos waiting for your decision"
+          />
+          <span className="font-display text-sm font-semibold tracking-[-0.02em] text-[#111618]">
+            Oudos
           </span>
         </div>
 
-        {request.first_time_requester && (
-          <div
-            role="alert"
-            data-testid="first-time-cooling-warning"
-            className="rounded-xl border border-[#B54708]/50 bg-[#FEF0C7] p-3 text-sm text-[#7A2E0E]"
-          >
-            <div className="flex items-start gap-2">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#B54708]" aria-hidden="true" />
-              <p className="font-medium leading-snug">
+        <span
+          className="inline-flex items-center gap-1.5 font-mono-code text-xs font-semibold text-[#525D63]"
+          aria-live="polite"
+          aria-label={`Request expires in ${formatCountdown(ttlRemaining)}`}
+        >
+          <Clock className="h-3.5 w-3.5 text-[#0F5C52]" aria-hidden="true" />
+          Expires in {formatCountdown(ttlRemaining)}
+        </span>
+      </header>
+
+      {!request.server_enrolled && (
+        <div
+          role="status"
+          className="flex items-center gap-2 border-b border-[#B54708]/35 bg-[#FEF0C7] px-5 py-2 text-xs font-semibold text-[#7A2E0E]"
+        >
+          <ShieldAlert className="h-4 w-4 shrink-0 text-[#B54708]" aria-hidden="true" />
+          <span>Unverified relay — this computer has not enrolled this server domain.</span>
+        </div>
+      )}
+
+      <section className="border-b border-[#DADDD8] bg-white px-5 py-3">
+        <h1
+          id="consent-card-heading"
+          className="font-display text-[20px] font-semibold leading-snug tracking-[-0.015em] text-[#111618]"
+        >
+          <span data-testid="consent-requester-name" className="break-words">
+            {request.requester_name}
+          </span>{" "}
+          wants to see your screen
+        </h1>
+
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          {request.server_enrolled ? (
+            <span
+              data-testid="server-domain-chip"
+              className="inline-flex items-center gap-1.5 font-mono-code text-xs font-semibold text-[#0F5C52]"
+            >
+              <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <span>{request.server_domain}</span>
+            </span>
+          ) : (
+            <span
+              data-testid="server-domain-chip"
+              className="inline-flex items-center gap-1.5 font-mono-code text-xs font-semibold text-[#B54708]"
+            >
+              <ShieldAlert className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <span>{request.server_domain} · Personal / Unverified</span>
+            </span>
+          )}
+        </div>
+
+        <p className="mt-1 text-[13px] text-[#525D63]">
+          Nothing is shared until you click Allow. You can end this session at any time.
+        </p>
+      </section>
+
+      <section
+        aria-label="6-digit verification code"
+        className="border-b border-[#DADDD8] bg-[#F5F6F4] px-5 py-3 text-center"
+      >
+        <p
+          data-testid="sas-code-display"
+          className="font-mono-code text-[30px] font-semibold leading-none tracking-[0.16em] text-[#111618]"
+        >
+          {request.sas_code}
+        </p>
+        <p className="mt-1.5 text-[13px] font-medium text-[#525D63]">
+          Only allow if the caller&apos;s 6-digit code matches this exact number.
+        </p>
+      </section>
+
+      {request.first_time_requester && (
+        <div
+          role="alert"
+          data-testid="first-time-cooling-warning"
+          className="border-b border-[#B54708]/35 bg-[#FEF0C7] px-5 py-2.5 text-[#7A2E0E]"
+        >
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#B54708]" aria-hidden="true" />
+            <div className="text-[13px] leading-snug">
+              <p className="font-medium">
                 STOP: Did someone call or message you about your bank, a refund, or a virus? Real
                 banks will NEVER ask you to share your screen.
               </p>
+              {coolingRemaining > 0 && (
+                <p className="mt-1 font-mono-code text-xs font-semibold text-[#B54708]">
+                  Safety wait: Allow unlocks in {coolingRemaining}s
+                </p>
+              )}
             </div>
-            {coolingRemaining > 0 && (
-              <p className="mt-1.5 font-mono-code text-sm font-semibold text-[#B54708]">
-                First-time safety wait: Allow unlocks in {coolingRemaining}s
-              </p>
-            )}
           </div>
-        )}
+        </div>
+      )}
 
-        <section
-          aria-label="6-digit verification code"
-          className="rounded-xl border border-[#0F7B6C]/30 bg-[#E3F1EE] px-4 py-3 text-center"
-        >
-          <p className="text-sm font-semibold text-[#074A40]">6-digit verification code</p>
-          <p
-            data-testid="sas-code-display"
-            className="mt-1 font-mono-code text-3xl font-semibold tracking-widest text-[#14181B]"
+      <fieldset className="border-b border-[#DADDD8] bg-white">
+        <legend className="sr-only">Permissions for this session</legend>
+        <div className="divide-y divide-[#DADDD8]">
+          <PermissionSwitchRow
+            id="perm-view-screen"
+            label="See your screen"
+            note="Required"
+            checked
+            disabled
+            lockedOn
+          />
+          <PermissionSwitchRow
+            id="perm-mouse-keyboard"
+            label="Mouse & keyboard"
+            note={!request.policy_ceilings.allow_mouse_keyboard ? "Off by policy" : undefined}
+            checked={permissions.mouse_keyboard}
+            disabled={!request.policy_ceilings.allow_mouse_keyboard}
+            onChange={(checked) =>
+              setPermissions((prev) => ({ ...prev, mouse_keyboard: checked }))
+            }
+          />
+          <PermissionSwitchRow
+            id="perm-clipboard"
+            label="Clipboard"
+            note={!request.policy_ceilings.allow_clipboard_sync ? "Off by policy" : undefined}
+            checked={permissions.clipboard_sync}
+            disabled={!request.policy_ceilings.allow_clipboard_sync}
+            onChange={(checked) =>
+              setPermissions((prev) => ({ ...prev, clipboard_sync: checked }))
+            }
+          />
+          <PermissionSwitchRow
+            id="perm-file-transfer"
+            label="File transfer"
+            note={!request.policy_ceilings.allow_file_transfer ? "Off by policy" : undefined}
+            checked={permissions.file_transfer}
+            disabled={!request.policy_ceilings.allow_file_transfer}
+            onChange={(checked) =>
+              setPermissions((prev) => ({ ...prev, file_transfer: checked }))
+            }
+          />
+        </div>
+      </fieldset>
+
+      <fieldset className="flex flex-1 items-center justify-between gap-3 border-b border-[#DADDD8] bg-white px-5 py-2.5">
+        <legend className="sr-only">Access duration</legend>
+        <span className="text-[13px] font-medium text-[#111618]" aria-hidden="true">
+          Access duration
+        </span>
+        <div className="inline-grid grid-cols-2 rounded-md border border-[#DADDD8] bg-[#F5F6F4] p-0.5 text-xs font-medium">
+          <label
+            className={`cursor-pointer rounded-[4px] px-3 py-1 text-center transition-colors ${
+              duration === "this_session"
+                ? "bg-white font-semibold text-[#111618] shadow-2xs"
+                : "text-[#525D63] hover:text-[#111618]"
+            }`}
           >
-            {request.sas_code}
-          </p>
-          <p className="mt-1 text-sm text-[#074A40]">
-            Only allow if the caller&apos;s code matches this exact number.
-          </p>
-        </section>
+            <input
+              type="radio"
+              name="grant-duration"
+              value="this_session"
+              checked={duration === "this_session"}
+              onChange={() => setDuration("this_session")}
+              className="sr-only"
+            />
+            <span>This session</span>
+          </label>
+          <label
+            className={`cursor-pointer rounded-[4px] px-3 py-1 text-center transition-colors ${
+              duration === "one_hour"
+                ? "bg-white font-semibold text-[#111618] shadow-2xs"
+                : "text-[#525D63] hover:text-[#111618]"
+            }`}
+          >
+            <input
+              type="radio"
+              name="grant-duration"
+              value="one_hour"
+              checked={duration === "one_hour"}
+              onChange={() => setDuration("one_hour")}
+              className="sr-only"
+            />
+            <span>1 hour</span>
+          </label>
+        </div>
+      </fieldset>
 
-        <fieldset className="rounded-xl border border-[#DADDD8] bg-white p-3.5">
-          <legend className="px-1 text-sm font-semibold text-[#14181B]">
-            What they can do
-          </legend>
-          <div className="mt-1.5 grid grid-cols-2 gap-2.5 text-sm">
-            <label className="flex items-center gap-2 text-[#14181B]">
-              <input
-                type="checkbox"
-                checked
-                disabled
-                className="h-4 w-4 accent-[#0F7B6C]"
-              />
-              <span>See screen (required)</span>
-            </label>
+      {errorMessage && (
+        <p
+          role="alert"
+          className="border-b border-[#B42318]/30 bg-[#FEE4E2] px-5 py-2 text-xs font-medium text-[#912018]"
+        >
+          {errorMessage}
+        </p>
+      )}
 
-            <label className="flex items-center gap-2 text-[#14181B]">
-              <input
-                type="checkbox"
-                checked={permissions.mouse_keyboard}
-                disabled={!request.policy_ceilings.allow_mouse_keyboard}
-                onChange={(e) =>
-                  setPermissions((prev) => ({
-                    ...prev,
-                    mouse_keyboard: e.target.checked,
-                  }))
-                }
-                className="h-4 w-4 accent-[#0F7B6C]"
-              />
-              <span>Mouse &amp; keyboard</span>
-            </label>
-
-            <label className="flex items-center gap-2 text-[#14181B]">
-              <input
-                type="checkbox"
-                checked={permissions.clipboard_sync}
-                disabled={!request.policy_ceilings.allow_clipboard_sync}
-                onChange={(e) =>
-                  setPermissions((prev) => ({
-                    ...prev,
-                    clipboard_sync: e.target.checked,
-                  }))
-                }
-                className="h-4 w-4 accent-[#0F7B6C]"
-              />
-              <span>Clipboard sync</span>
-            </label>
-
-            <label className="flex items-center gap-2 text-[#14181B]">
-              <input
-                type="checkbox"
-                checked={permissions.file_transfer}
-                disabled={!request.policy_ceilings.allow_file_transfer}
-                onChange={(e) =>
-                  setPermissions((prev) => ({
-                    ...prev,
-                    file_transfer: e.target.checked,
-                  }))
-                }
-                className="h-4 w-4 accent-[#0F7B6C]"
-              />
-              <span>
-                File transfer
-                {!request.policy_ceilings.allow_file_transfer ? " (policy off)" : ""}
-              </span>
-            </label>
-          </div>
-        </fieldset>
-
-        <fieldset className="rounded-xl border border-[#DADDD8] bg-white p-3.5">
-          <legend className="px-1 text-sm font-semibold text-[#14181B]">
-            How long access lasts (v0.1 limit)
-          </legend>
-          <div className="mt-1.5 grid grid-cols-2 gap-2.5 text-sm">
-            <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-[#DADDD8] px-3 py-2 text-[#14181B]">
-              <input
-                type="radio"
-                name="grant-duration"
-                value="this_session"
-                checked={duration === "this_session"}
-                onChange={() => setDuration("this_session")}
-                className="h-4 w-4 accent-[#0F7B6C]"
-              />
-              <span>This session</span>
-            </label>
-            <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-[#DADDD8] px-3 py-2 text-[#14181B]">
-              <input
-                type="radio"
-                name="grant-duration"
-                value="one_hour"
-                checked={duration === "one_hour"}
-                onChange={() => setDuration("one_hour")}
-                className="h-4 w-4 accent-[#0F7B6C]"
-              />
-              <span>1 hour</span>
-            </label>
-          </div>
-        </fieldset>
-
-        {errorMessage && (
-          <p role="alert" className="rounded-lg bg-[#FEE4E2] px-3 py-2 text-sm font-medium text-[#B42318]">
-            {errorMessage}
-          </p>
-        )}
-      </div>
-
-      <div className="mt-4 space-y-2 pt-2">
-        <div className="flex gap-3">
+      <footer className="bg-[#F5F6F4] px-5 py-3">
+        <div className="grid grid-cols-2 gap-3">
           <button
             type="button"
             onClick={onDeny}
             disabled={submitting}
-            className="flex-1 rounded-lg border border-[#B42318] bg-[#FEE4E2] px-4 py-2.5 text-sm font-semibold text-[#912018] hover:bg-[#FCD5D2] focus:outline-none focus:ring-2 focus:ring-[#B42318]"
+            className="rounded-md border border-[#B42318] bg-[#FEE4E2] px-4 py-2.5 text-sm font-semibold text-[#912018] transition-colors hover:bg-[#FCD5D2] focus:outline-none focus:ring-2 focus:ring-[#B42318]"
           >
             Deny
           </button>
@@ -288,27 +354,29 @@ export const ConsentPromptCard: React.FC<ConsentPromptCardProps> = ({
             type="button"
             onClick={() => onAllow(permissions, duration)}
             disabled={allowBlocked}
-            className="flex-1 rounded-lg bg-[#0F7B6C] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#0A6457] focus:outline-none focus:ring-2 focus:ring-[#074A40] disabled:cursor-not-allowed disabled:bg-[#5C6560]"
+            className="rounded-md bg-[#0F5C52] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#0B473F] focus:outline-none focus:ring-2 focus:ring-[#083630] disabled:cursor-not-allowed disabled:bg-[#DCE0DC] disabled:text-[#384146]"
           >
             {coolingRemaining > 0 ? `Allow (${coolingRemaining}s)` : "Allow"}
           </button>
         </div>
         {onBlockAndReport && (
-          <button
-            type="button"
-            disabled={submitting}
-            onClick={() =>
-              onBlockAndReport(
-                "scam_attempt",
-                "Blocked & reported from host consent prompt"
-              )
-            }
-            className="w-full rounded-lg border border-[#DADDD8] bg-white px-3 py-1.5 text-xs font-medium text-[#912018] hover:bg-[#FEE4E2]/40 focus:outline-none focus:ring-2 focus:ring-[#B42318]"
-          >
-            Block &amp; report requester
-          </button>
+          <div className="mt-2 text-center">
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={() =>
+                onBlockAndReport(
+                  "scam_attempt",
+                  "Blocked & reported from host consent prompt"
+                )
+              }
+              className="rounded px-2 py-1 text-xs font-medium text-[#B42318] hover:underline focus:outline-none focus:ring-2 focus:ring-[#B42318]"
+            >
+              Block &amp; report requester
+            </button>
+          </div>
         )}
-      </div>
+      </footer>
     </main>
   );
 };

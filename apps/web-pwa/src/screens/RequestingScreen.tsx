@@ -53,88 +53,85 @@ export const RequestingScreen: React.FC<RequestingScreenProps> = ({
   return (
     <section
       aria-labelledby="requesting-heading"
-      className="mx-auto max-w-xl rounded-2xl border border-[#DADDD8] bg-white p-6 shadow-xs sm:p-8"
+      className="mx-auto max-w-xl border border-[#DADDD8] bg-white divide-y divide-[#DADDD8]"
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-3.5">
         {device.enrolledServer ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#E3F1EE] px-3 py-1 text-xs font-medium text-[#074A40]">
+          <span className="inline-flex items-center gap-1.5 font-mono-code text-xs font-semibold text-[#0F5C52]">
             <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
             {device.serverDomain}
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FEF0C7] px-3 py-1 text-xs font-medium text-[#B54708]">
+          <span className="inline-flex items-center gap-1.5 font-mono-code text-xs font-semibold text-[#B54708]">
             <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" />
             {device.serverDomain}
           </span>
         )}
         <span
-          className="inline-flex items-center gap-1.5 font-mono-code text-sm font-medium text-[#4A524E]"
+          className="inline-flex items-center gap-1.5 font-mono-code text-xs font-semibold text-[#525D63]"
           aria-live="polite"
         >
-          <Clock className="h-4 w-4 text-[#0F7B6C]" aria-hidden="true" />
+          <Clock className="h-3.5 w-3.5 text-[#0F5C52]" aria-hidden="true" />
           {mins}:{secs} left
         </span>
       </div>
 
       <ol
         aria-label="Connection progress"
-        className="mt-5 grid grid-cols-3 gap-2 text-xs"
+        className="grid grid-cols-3 divide-x divide-[#DADDD8] bg-[#F5F6F4] text-xs"
       >
-        <li className="flex items-center gap-1.5 rounded-lg border border-[#0F7B6C]/30 bg-[#E3F1EE] px-2.5 py-2 font-medium text-[#074A40]">
-          <Check className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        <li className="flex items-center gap-1.5 px-3 py-2.5 font-medium text-[#083630]">
+          <Check className="h-3.5 w-3.5 shrink-0 text-[#0F5C52]" aria-hidden="true" />
           1. Key verified
         </li>
         <li
           aria-current="step"
-          className="rounded-lg border border-[#0F7B6C] bg-white px-2.5 py-2 font-semibold text-[#14181B]"
+          className="border-b-2 border-[#0F5C52] bg-white px-3 py-2.5 font-semibold text-[#111618]"
         >
           2. Owner approval
         </li>
-        <li className="rounded-lg border border-[#DADDD8] bg-[#F5F6F4] px-2.5 py-2 text-[#5C6560]">
-          3. Secure channel
-        </li>
+        <li className="px-3 py-2.5 text-[#525D63]">3. Secure channel</li>
       </ol>
 
-      <h1 id="requesting-heading" className="mt-5 text-2xl font-semibold text-[#14181B]">
-        Waiting for {device.ownerName} to allow access ({mins}:{secs} left)
-      </h1>
-      <p className="mt-2 text-sm text-[#4A524E]">
-        {isJoinRequest ? "Asking to join the live session on " : "Connecting to "}
-        <span className="font-medium text-[#14181B]">{device.alias}</span> (
-        <span className="font-mono-code">{device.deviceId}</span>). Nothing starts until{" "}
-        {device.ownerName} approves on their screen.
-      </p>
-
-      <div className="mt-6 rounded-xl border border-[#0F7B6C]/30 bg-[#E3F1EE] p-5 text-center">
-        <p className="text-xs font-semibold uppercase tracking-wider text-[#074A40]">
-          6-Digit Verification Code
+      <div className="px-6 py-5">
+        <h1 id="requesting-heading" className="text-xl font-semibold text-[#111618]">
+          Waiting for {device.ownerName} to allow access ({mins}:{secs} left)
+        </h1>
+        <p className="mt-1.5 text-sm text-[#525D63]">
+          {isJoinRequest ? "Asking to join the live session on " : "Connecting to "}
+          <span className="font-medium text-[#111618]">{device.alias}</span> (
+          <span className="font-mono-code">{device.deviceId}</span>). Nothing starts until{" "}
+          {device.ownerName} approves on their screen.
         </p>
+      </div>
+
+      <div className="bg-[#F5F6F4] px-6 py-5 text-center">
         <p
-          className="mt-2 font-mono-code text-4xl font-semibold tracking-widest text-[#14181B]"
+          className="font-mono-code text-4xl font-semibold tracking-[0.16em] text-[#111618]"
           aria-label={`Verification code ${sasCode}`}
         >
           {sasCode}
         </p>
-        <p className="mt-2 text-sm text-[#074A40]">
-          Confirm this exact number matches the code shown on {device.ownerName}&apos;s screen.
+        <p className="mt-2 text-sm text-[#525D63]">
+          Confirm this exact 6-digit code matches the number shown on {device.ownerName}&apos;s screen.
         </p>
       </div>
 
-      <fieldset className="mt-5 rounded-xl border border-[#DADDD8] bg-[#F5F6F4] p-4">
-        <legend className="px-1 text-xs font-semibold uppercase tracking-wider text-[#4A524E]">
+      <fieldset className="px-6 py-4">
+        <legend className="text-xs font-semibold text-[#111618]">
           Requested permissions ({device.ownerName} decides final grants)
         </legend>
-        <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
-          <label className="flex items-center gap-2 text-[#14181B]">
+        <div className="mt-2.5 grid gap-2.5 text-xs sm:grid-cols-2">
+          <label className="flex items-center gap-2 text-[#111618]">
             <input
               type="checkbox"
               checked
               disabled
-              className="h-4 w-4 accent-[#0F7B6C]"
+              className="h-4 w-4 accent-[#0F5C52]"
             />
             <span>See screen (required)</span>
           </label>
-          <label className="flex items-center gap-2 text-[#14181B]">
+          <label className="flex items-center gap-2 text-[#111618]">
             <input
               type="checkbox"
               disabled={!policy.allowMouseKeyboard.value}
@@ -145,13 +142,13 @@ export const RequestingScreen: React.FC<RequestingScreenProps> = ({
                   mouseKeyboard: e.target.checked,
                 })
               }
-              className="h-4 w-4 accent-[#0F7B6C]"
+              className="h-4 w-4 accent-[#0F5C52]"
             />
             <span>
               Mouse &amp; keyboard{!policy.allowMouseKeyboard.value ? " (blocked by policy)" : ""}
             </span>
           </label>
-          <label className="flex items-center gap-2 text-[#14181B]">
+          <label className="flex items-center gap-2 text-[#111618]">
             <input
               type="checkbox"
               disabled={!policy.allowClipboardSync.value}
@@ -162,13 +159,13 @@ export const RequestingScreen: React.FC<RequestingScreenProps> = ({
                   clipboardSync: e.target.checked,
                 })
               }
-              className="h-4 w-4 accent-[#0F7B6C]"
+              className="h-4 w-4 accent-[#0F5C52]"
             />
             <span>
               Clipboard sync{!policy.allowClipboardSync.value ? " (blocked by policy)" : ""}
             </span>
           </label>
-          <label className="flex items-center gap-2 text-[#14181B]">
+          <label className="flex items-center gap-2 text-[#111618]">
             <input
               type="checkbox"
               disabled={!policy.allowFileTransfer.value}
@@ -179,7 +176,7 @@ export const RequestingScreen: React.FC<RequestingScreenProps> = ({
                   fileTransfer: e.target.checked,
                 })
               }
-              className="h-4 w-4 accent-[#0F7B6C]"
+              className="h-4 w-4 accent-[#0F5C52]"
             />
             <span>
               File transfer{!policy.allowFileTransfer.value ? " (off by policy)" : ""}
@@ -188,18 +185,18 @@ export const RequestingScreen: React.FC<RequestingScreenProps> = ({
         </div>
       </fieldset>
 
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+      <div className="flex flex-col gap-3 bg-[#F5F6F4] px-6 py-4 sm:flex-row">
         <button
           type="button"
           onClick={onCancel}
-          className="flex-1 rounded-lg border border-[#DADDD8] bg-white px-4 py-2.5 text-sm font-medium text-[#14181B] hover:bg-[#F5F6F4] focus:outline-none focus:ring-2 focus:ring-[#0F7B6C]"
+          className="flex-1 rounded-md border border-[#DADDD8] bg-white px-4 py-2.5 text-sm font-medium text-[#111618] hover:bg-[#F5F6F4] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C52]"
         >
           Cancel request
         </button>
         <button
           type="button"
           onClick={onCodeMismatch}
-          className="flex-1 rounded-lg border border-[#B42318]/40 bg-[#FEE4E2] px-4 py-2.5 text-sm font-semibold text-[#B42318] hover:bg-[#FCD5D2] focus:outline-none focus:ring-2 focus:ring-[#B42318]"
+          className="flex-1 rounded-md border border-[#B42318] bg-[#FEE4E2] px-4 py-2.5 text-sm font-semibold text-[#912018] hover:bg-[#FCD5D2] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B42318]"
         >
           Codes don&apos;t match
         </button>

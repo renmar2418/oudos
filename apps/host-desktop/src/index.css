@@ -1,18 +1,18 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Space Grotesk", "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-sans: "Inter", "Segoe UI Variable Text", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", "Inter", "Segoe UI Variable Display", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Mono", ui-monospace, SFMono-Regular, monospace;
 
-  --color-oud-teal: #0F7B6C;
-  --color-oud-teal-hover: #0A6457;
-  --color-oud-teal-deep: #074A40;
+  --color-oud-teal: #0F5C52;
+  --color-oud-teal-hover: #0B473F;
+  --color-oud-teal-deep: #083630;
   --color-oud-mint: #5FD9BF;
-  --color-oud-tint: #E3F1EE;
-  --color-oud-ink: #14181B;
-  --color-oud-secondary: #4A524E;
-  --color-oud-muted: #5C6560;
+  --color-oud-tint: #E6F2F0;
+  --color-oud-ink: #111618;
+  --color-oud-secondary: #525D63;
+  --color-oud-muted: #525D63;
   --color-oud-border: #DADDD8;
   --color-oud-surface: #F5F6F4;
   --color-oud-chrome: #0E1214;
@@ -28,7 +28,15 @@ body,
 #root {
   margin: 0;
   padding: 0;
+  min-height: 100%;
   font-family: var(--font-sans);
+  caret-color: #0F5C52;
+  accent-color: #0F5C52;
+}
+
+::selection {
+  background-color: #D7ECE8;
+  color: #111618;
 }
 
 h1,
@@ -41,4 +49,13 @@ h3,
 .font-mono-code {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }

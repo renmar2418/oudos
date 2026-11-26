@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
+import { HostFacingBracketsIcon } from "./components/HostFacingBracketsIcon";
 import type { HostBridge } from "./services/hostBridge";
 import type { HostSnapshot } from "./types";
 
@@ -172,7 +173,7 @@ describe("Oudos host-desktop Consent UI, Banner & Tray", () => {
 
     const { container } = render(<App bridge={bridge} initialSnapshot={initial} />);
 
-    // Raw server domain chip (never a fake Verified badge)
+    // Raw server domain (never a fake Verified badge)
     const domainChip = screen.getByTestId("server-domain-chip");
     expect(domainChip).toHaveTextContent("support.example.org");
     expect(screen.queryByText(/Verified/i)).not.toBeInTheDocument();
@@ -183,12 +184,12 @@ describe("Oudos host-desktop Consent UI, Banner & Tray", () => {
       /Real banks will NEVER ask you to share your screen/i
     );
 
-    // Permission defaults: See screen checked+disabled; Mouse/Keyboard, Clipboard, File transfer OFF
-    expect(screen.getByLabelText(/See screen/i)).toBeChecked();
-    expect(screen.getByLabelText(/See screen/i)).toBeDisabled();
-    expect(screen.getByLabelText(/Mouse & keyboard/i)).not.toBeChecked();
-    expect(screen.getByLabelText(/Clipboard sync/i)).not.toBeChecked();
-    expect(screen.getByLabelText(/File transfer/i)).not.toBeChecked();
+    // Permission defaults: See your screen checked+disabled; Mouse/Keyboard, Clipboard, File transfer OFF
+    expect(screen.getByRole("switch", { name: /See your screen/i })).toBeChecked();
+    expect(screen.getByRole("switch", { name: /See your screen/i })).toBeDisabled();
+    expect(screen.getByRole("switch", { name: /Mouse & keyboard/i })).not.toBeChecked();
+    expect(screen.getByRole("switch", { name: /Clipboard/i })).not.toBeChecked();
+    expect(screen.getByRole("switch", { name: /File transfer/i })).not.toBeChecked();
 
     // v0.1 duration options only (no "Until I turn it off")
     expect(screen.getByLabelText("This session")).toBeChecked();
@@ -315,16 +316,44 @@ describe("Oudos host-desktop Consent UI, Banner & Tray", () => {
     await expectZeroAxeViolations(container);
   });
 
-  it("renders all 3 colour-independent Facing Brackets tray states cleanly", async () => {
-    const idleSnap = makePendingSnapshot({ pending_request: null, tray_state: "idle" });
+  it("keeps Idle screen free of spec jargon and tucks telemetry into collapsed Diagnostics", async () => {
+    const idleSnap = makePendingSnapshot({
+      pending_request: null,
+      tray_state: "idle",
+      audit_entry_count: 4,
+      blocked_input_count: 2,
+      dropped_frame_count: 1,
+    });
     const { bridge } = makeMemoryBridge(idleSnap);
     const { container } = render(<App bridge={bridge} initialSnapshot={idleSnap} />);
 
+    expect(screen.getByText("Ready · No active session")).toBeInTheDocument();
+    expect(screen.queryByText(/Asks-First v0\.1/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Monochrome tray indicators/i)).not.toBeInTheDocument();
+
+    const details = container.querySelector("details");
+    expect(details).not.toBeNull();
+    expect(details?.hasAttribute("open")).toBe(false);
+
+    expect(screen.getByTestId("diag-audit-count")).toHaveTextContent("4");
+    expect(screen.getByTestId("diag-blocked-input")).toHaveTextContent("2");
+    expect(screen.getByTestId("diag-dropped-frames")).toHaveTextContent("1");
+
+    await expectZeroAxeViolations(container);
+  });
+
+  it("renders all 3 colour-independent Facing Brackets tray states cleanly", async () => {
+    const { container } = render(
+      <div>
+        <HostFacingBracketsIcon state="idle" label="Idle" />
+        <HostFacingBracketsIcon state="in_session" label="In session" />
+        <HostFacingBracketsIcon state="alert" label="Alert" />
+      </div>
+    );
+
     const svgs = container.querySelectorAll("svg[data-tray-state]");
     const states = Array.from(svgs).map((el) => el.getAttribute("data-tray-state"));
-    expect(states).toContain("idle");
-    expect(states).toContain("in_session");
-    expect(states).toContain("alert");
+    expect(states).toEqual(["idle", "in_session", "alert"]);
     expect(container.querySelector('[data-testid="tray-center-dot"]')).toBeInTheDocument();
     expect(container.querySelector('[data-testid="tray-alert-mark"]')).toBeInTheDocument();
 

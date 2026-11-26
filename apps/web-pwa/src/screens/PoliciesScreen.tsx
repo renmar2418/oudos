@@ -54,23 +54,23 @@ export const PoliciesScreen: React.FC<PoliciesScreenProps> = ({ policy, onUpdate
   };
 
   return (
-    <section aria-labelledby="policies-heading" className="space-y-6">
-      <div>
-        <h1 id="policies-heading" className="text-2xl font-semibold tracking-tight text-[#14181B]">
+    <section aria-labelledby="policies-heading" className="space-y-5">
+      <div className="border-b border-[#DADDD8] pb-4">
+        <h1 id="policies-heading" className="text-2xl font-semibold tracking-tight text-[#111618]">
           Policies
         </h1>
-        <p className="mt-1 text-sm text-[#4A524E]">
+        <p className="mt-1 text-sm text-[#525D63]">
           Strictest rule always wins across Organisation, Group, and Device Owner. You can tighten rules, never loosen them.
         </p>
       </div>
 
-      <div className="divide-y divide-[#DADDD8] rounded-xl border border-[#DADDD8] bg-white">
+      <div className="divide-y divide-[#DADDD8] border border-[#DADDD8] bg-white">
         <PolicyRow
           title="Ask before connection"
           description="Device owner must explicitly approve every session on their screen."
           lockedBy={policy.askBeforeConnection.lockedBy}
           control={
-            <span className="rounded-md bg-[#E3F1EE] px-2.5 py-1 text-xs font-semibold text-[#074A40]">
+            <span className="font-mono-code text-xs font-semibold text-[#0F5C52]">
               Required ON
             </span>
           }
@@ -78,10 +78,10 @@ export const PoliciesScreen: React.FC<PoliciesScreenProps> = ({ policy, onUpdate
 
         <PolicyRow
           title="Require matching 6-digit code"
-          description="Both peers verify the locally derived SAS code before access begins."
+          description="Both peers verify the locally derived 6-digit code before access begins."
           lockedBy={policy.requireMatchingCode.lockedBy}
           control={
-            <span className="rounded-md bg-[#E3F1EE] px-2.5 py-1 text-xs font-semibold text-[#074A40]">
+            <span className="font-mono-code text-xs font-semibold text-[#0F5C52]">
               Required ON
             </span>
           }
@@ -89,10 +89,10 @@ export const PoliciesScreen: React.FC<PoliciesScreenProps> = ({ policy, onUpdate
 
         <PolicyRow
           title="Unattended mode"
-          description="Background access without owner consent is disabled in v0.1 Asks-First mode."
+          description="Background access without owner consent is disabled in Asks-First mode."
           lockedBy={policy.allowUnattended.lockedBy}
           control={
-            <span className="rounded-md bg-[#F5F6F4] px-2.5 py-1 text-xs font-semibold text-[#4A524E]">
+            <span className="font-mono-code text-xs font-semibold text-[#525D63]">
               Locked OFF
             </span>
           }
@@ -103,7 +103,7 @@ export const PoliciesScreen: React.FC<PoliciesScreenProps> = ({ policy, onUpdate
           description="Chunked file transfer is off by default and blocked when disabled upstream."
           lockedBy={policy.allowFileTransfer.lockedBy}
           control={
-            <span className="rounded-md bg-[#F5F6F4] px-2.5 py-1 text-xs font-semibold text-[#4A524E]">
+            <span className="font-mono-code text-xs font-semibold text-[#525D63]">
               {policy.allowFileTransfer.value ? "Allowed" : "Off"}
             </span>
           }
@@ -121,10 +121,10 @@ export const PoliciesScreen: React.FC<PoliciesScreenProps> = ({ policy, onUpdate
               aria-label="Allow remote mouse and keyboard ceiling"
               disabled={Boolean(policy.allowMouseKeyboard.lockedBy)}
               onClick={toggleMouseKeyboard}
-              className={`rounded-full px-3.5 py-1 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[#0F7B6C] ${
+              className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C52] ${
                 policy.allowMouseKeyboard.value
-                  ? "bg-[#0F7B6C] text-white"
-                  : "bg-[#DADDD8] text-[#14181B]"
+                  ? "border-[#0F5C52] bg-[#0F5C52] text-white"
+                  : "border-[#DADDD8] bg-[#F5F6F4] text-[#111618]"
               }`}
             >
               {policy.allowMouseKeyboard.value ? "Allowed" : "Disabled"}
@@ -144,10 +144,10 @@ export const PoliciesScreen: React.FC<PoliciesScreenProps> = ({ policy, onUpdate
               aria-label="Allow clipboard sync ceiling"
               disabled={Boolean(policy.allowClipboardSync.lockedBy)}
               onClick={toggleClipboard}
-              className={`rounded-full px-3.5 py-1 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[#0F7B6C] ${
+              className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C52] ${
                 policy.allowClipboardSync.value
-                  ? "bg-[#0F7B6C] text-white"
-                  : "bg-[#DADDD8] text-[#14181B]"
+                  ? "border-[#0F5C52] bg-[#0F5C52] text-white"
+                  : "border-[#DADDD8] bg-[#F5F6F4] text-[#111618]"
               }`}
             >
               {policy.allowClipboardSync.value ? "Allowed" : "Disabled"}
@@ -168,7 +168,7 @@ export const PoliciesScreen: React.FC<PoliciesScreenProps> = ({ policy, onUpdate
                 id="idle-timeout-select"
                 value={policy.idleTimeout.value}
                 onChange={(e) => changeIdleTimeout(e.target.value as IdleTimeoutOption)}
-                className="rounded-lg border border-[#DADDD8] bg-white px-3 py-1.5 text-sm text-[#14181B] focus:border-[#0F7B6C] focus:outline-none focus:ring-2 focus:ring-[#0F7B6C]"
+                className="rounded-md border border-[#DADDD8] bg-white px-3 py-1.5 text-sm text-[#111618] focus:border-[#0F5C52] focus:outline-none focus:ring-2 focus:ring-[#0F5C52]"
               >
                 <option value="15m">15 minutes (strictest)</option>
                 <option value="30m" disabled={IDLE_RANK["30m"] > IDLE_RANK[policy.idleTimeout.value]}>
@@ -197,18 +197,18 @@ interface PolicyRowProps {
 }
 
 const PolicyRow: React.FC<PolicyRowProps> = ({ title, description, lockedBy, control }) => (
-  <div className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+  <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
     <div>
-      <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-sm font-semibold text-[#14181B]">{title}</h2>
+      <div className="flex flex-wrap items-center gap-2.5">
+        <h2 className="text-sm font-semibold text-[#111618]">{title}</h2>
         {lockedBy && (
-          <span className="inline-flex items-center gap-1 rounded-md bg-[#F5F6F4] px-2 py-0.5 text-xs font-medium text-[#4A524E]">
-            <Lock className="h-3 w-3 text-[#0F7B6C]" aria-hidden="true" />
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-[#525D63]">
+            <Lock className="h-3 w-3 text-[#0F5C52]" aria-hidden="true" />
             {SCOPE_LABELS[lockedBy]}
           </span>
         )}
       </div>
-      <p className="mt-1 text-sm text-[#4A524E]">{description}</p>
+      <p className="mt-1 text-sm text-[#525D63]">{description}</p>
     </div>
     <div className="shrink-0">{control}</div>
   </div>

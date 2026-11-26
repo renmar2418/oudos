@@ -564,64 +564,94 @@ export const App: React.FC<AppProps> = ({
     setActiveTab("devices");
   };
 
+  const isLiveSessionView = activeTab === "session" && !endedSummarySession;
   const iconState =
     requestOutcome.kind === "device_key_changed" ||
     requestOutcome.kind === "code_mismatch"
       ? "alert"
-      : activeTab === "session" && !endedSummarySession
+      : isLiveSessionView
         ? "in_session"
         : "idle";
 
   return (
-    <div className="min-h-screen bg-[#F5F6F4] text-[#14181B]">
+    <div
+      className={`flex min-h-screen flex-col ${
+        isLiveSessionView
+          ? "bg-[#0E1214] text-white"
+          : "bg-[#F5F6F4] text-[#111618]"
+      }`}
+    >
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-[#0F7B6C] focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-[#0F5C52] focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
       >
         Skip to main content
       </a>
 
-      <header className="border-b border-[#DADDD8] bg-white">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <div className="flex items-center gap-2.5">
-            <span className={iconState === "alert" ? "text-[#B42318]" : "text-[#0F7B6C]"}>
-              <FacingBracketsIcon state={iconState} className="h-7 w-7" label="Oudos" />
-            </span>
-            <span className="font-display text-xl font-semibold tracking-[-0.02em] text-[#14181B]">
-              Oudos
-            </span>
-            <span className="rounded-md bg-[#E3F1EE] px-2 py-0.5 text-xs font-medium text-[#074A40]">
-              v0.1 Asks-First
-            </span>
+      <header className="border-b border-[#DADDD8] bg-white text-[#111618]">
+        <div className="mx-auto flex max-w-6xl flex-col sm:flex-row sm:items-center sm:justify-between sm:gap-x-6 sm:px-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:gap-5">
+            <div className="flex items-center justify-between px-4 py-2.5 sm:px-0 sm:py-0">
+              <div className="flex items-center gap-2">
+                <span className={iconState === "alert" ? "text-[#B42318]" : "text-[#0F5C52]"}>
+                  <FacingBracketsIcon state={iconState} className="h-6 w-6" label="Oudos" />
+                </span>
+                <span className="font-display text-lg font-semibold tracking-[-0.02em] text-[#111618]">
+                  Oudos
+                </span>
+              </div>
+              <span className="font-mono-code text-[11px] font-medium text-[#0F5C52] sm:hidden">
+                support.example.org
+              </span>
+            </div>
+
+            <nav
+              aria-label="Primary navigation"
+              className="flex items-center gap-1 overflow-x-auto border-t border-[#DADDD8]/70 px-4 sm:border-t-0 sm:px-0"
+            >
+              {NAV_ITEMS.map((item) => {
+                const current = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    aria-current={current ? "page" : undefined}
+                    onClick={() => {
+                      if (item.id === "session") setEndedSummarySession(null);
+                      setActiveTab(item.id);
+                    }}
+                    className={`border-b-2 px-2 py-2.5 text-xs whitespace-nowrap transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C52] sm:px-2.5 sm:py-3 sm:text-sm ${
+                      current
+                        ? "border-[#0F5C52] font-semibold text-[#111618]"
+                        : "border-transparent font-medium text-[#525D63] hover:border-[#DADDD8] hover:text-[#111618]"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
+            </nav>
           </div>
 
-          <nav aria-label="Primary navigation" className="flex flex-wrap gap-1">
-            {NAV_ITEMS.map((item) => {
-              const current = activeTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  aria-current={current ? "page" : undefined}
-                  onClick={() => {
-                    if (item.id === "session") setEndedSummarySession(null);
-                    setActiveTab(item.id);
-                  }}
-                  className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[#0F7B6C] ${
-                    current
-                      ? "bg-[#E3F1EE] text-[#074A40]"
-                      : "text-[#4A524E] hover:bg-[#F5F6F4] hover:text-[#14181B]"
-                  }`}
-                >
-                  {item.label}
-                </button>
-              );
-            })}
-          </nav>
+          <div
+            aria-label="Account and server identity"
+            className="hidden items-center gap-2.5 py-2 text-xs text-[#525D63] lg:flex"
+          >
+            <span className="font-medium text-[#111618]">alex@support.example.org</span>
+            <span className="h-3.5 w-px bg-[#DADDD8]" aria-hidden="true" />
+            <span className="font-mono-code text-[#0F5C52]">support.example.org</span>
+          </div>
         </div>
       </header>
 
-      <main id="main-content" className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+      <main
+        id="main-content"
+        className={
+          isLiveSessionView
+            ? "flex flex-1 flex-col bg-[#0E1214]"
+            : "mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6"
+        }
+      >
         {activeTab === "devices" && (
           <DevicesScreen
             devices={devices}

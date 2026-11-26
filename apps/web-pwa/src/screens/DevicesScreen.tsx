@@ -42,12 +42,6 @@ const PRESENCE_LABELS: Record<DevicePresence, string> = {
   offline: "Offline",
 };
 
-const PRESENCE_STYLES: Record<DevicePresence, string> = {
-  online: "bg-[#E3F1EE] text-[#074A40] border-[#0F7B6C]/30",
-  in_session: "bg-[#E3F1EE] text-[#074A40] border-[#0F7B6C]/40",
-  offline: "bg-[#F5F6F4] text-[#4A524E] border-[#DADDD8]",
-};
-
 export const DevicesScreen: React.FC<DevicesScreenProps> = ({
   devices,
   onConnect,
@@ -165,13 +159,13 @@ export const DevicesScreen: React.FC<DevicesScreenProps> = ({
   }, [devices, filter, query]);
 
   return (
-    <section aria-labelledby="devices-heading" className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <section aria-labelledby="devices-heading" className="space-y-5">
+      <div className="flex flex-col gap-3 border-b border-[#DADDD8] pb-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 id="devices-heading" className="text-2xl font-semibold tracking-tight text-[#14181B]">
+          <h1 id="devices-heading" className="text-2xl font-semibold tracking-tight text-[#111618]">
             Devices
           </h1>
-          <p className="mt-1 text-sm text-[#4A524E]">
+          <p className="mt-1 text-sm text-[#525D63]">
             Every connection asks the device owner first and displays your 6-digit verification code.
           </p>
         </div>
@@ -179,7 +173,7 @@ export const DevicesScreen: React.FC<DevicesScreenProps> = ({
         <button
           type="button"
           onClick={onOpenAddDevice}
-          className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#0F7B6C] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#0A6457] focus:outline-none focus:ring-2 focus:ring-[#0F7B6C] focus:ring-offset-2"
+          className="inline-flex min-h-[40px] items-center justify-center gap-2 rounded-md bg-[#0F5C52] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#0B473F] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C52] focus-visible:ring-offset-2"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
           Add device
@@ -187,12 +181,12 @@ export const DevicesScreen: React.FC<DevicesScreenProps> = ({
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative flex-1 max-w-md">
+        <div className="relative max-w-md flex-1">
           <label htmlFor="device-search" className="sr-only">
             Search devices by name, owner, OS, or 9-digit ID
           </label>
           <Search
-            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5C6560]"
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#525D63]"
             aria-hidden="true"
           />
           <input
@@ -201,11 +195,15 @@ export const DevicesScreen: React.FC<DevicesScreenProps> = ({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search name, owner, OS, or 9-digit ID..."
-            className="w-full rounded-lg border border-[#DADDD8] bg-white py-2 pl-9 pr-3 text-sm text-[#14181B] placeholder:text-[#5C6560] focus:border-[#0F7B6C] focus:outline-none focus:ring-2 focus:ring-[#0F7B6C]/30"
+            className="w-full rounded-md border border-[#DADDD8] bg-white py-2 pl-9 pr-3 text-sm text-[#111618] placeholder:text-[#525D63] focus:border-[#0F5C52] focus:outline-none focus:ring-2 focus:ring-[#0F5C52]/25"
           />
         </div>
 
-        <div role="group" aria-label="Filter devices by status" className="flex flex-wrap gap-2">
+        <div
+          role="group"
+          aria-label="Filter devices by status"
+          className="grid grid-cols-2 gap-px border border-[#DADDD8] bg-[#DADDD8] sm:inline-flex"
+        >
           {(["all", "online", "in_session", "offline"] as const).map((status) => {
             const active = filter === status;
             const label = status === "all" ? "All" : PRESENCE_LABELS[status];
@@ -215,178 +213,186 @@ export const DevicesScreen: React.FC<DevicesScreenProps> = ({
                 type="button"
                 aria-pressed={active}
                 onClick={() => setFilter(status)}
-                className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[#0F7B6C] ${
+                className={`px-3 py-1.5 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0F5C52] ${
                   active
-                    ? "bg-[#E3F1EE] text-[#074A40] border border-[#0F7B6C]/40"
-                    : "bg-white text-[#4A524E] border border-[#DADDD8] hover:bg-[#F5F6F4]"
+                    ? "bg-[#E6F2F0] font-semibold text-[#083630]"
+                    : "bg-white text-[#525D63] hover:bg-[#F5F6F4] hover:text-[#111618]"
                 }`}
               >
-                {label} ({counts[status]})
+                {label} <span className="font-mono-code">({counts[status]})</span>
               </button>
             );
           })}
         </div>
       </div>
 
-      <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-label="Registered devices">
-        {filteredDevices.map((device) => {
-          const isScreenUnavailable = Boolean(device.screenUnavailable);
-          return (
-            <li
-              key={device.deviceId}
-              className="flex flex-col justify-between rounded-xl border border-[#DADDD8] bg-white p-5 shadow-xs"
-            >
-              <div>
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2.5">
-                    <div
-                      className={`flex h-9 w-9 items-center justify-center rounded-lg ${
-                        isScreenUnavailable
-                          ? "bg-[#FEF0C7] text-[#B54708]"
-                          : "bg-[#E3F1EE] text-[#0F7B6C]"
+      <div className="border border-[#DADDD8] bg-white">
+        <div
+          aria-hidden="true"
+          className="hidden border-b border-[#DADDD8] bg-[#F5F6F4] px-4 py-2 text-xs font-medium text-[#525D63] md:grid md:grid-cols-[minmax(190px,1.5fr)_130px_185px_165px_170px] md:gap-4"
+        >
+          <span>Device</span>
+          <span>Device ID</span>
+          <span>Server</span>
+          <span>Status</span>
+          <span className="text-right">Action</span>
+        </div>
+
+        {filteredDevices.length > 0 ? (
+          <ul className="divide-y divide-[#DADDD8]" aria-label="Registered devices">
+            {filteredDevices.map((device) => {
+              const isScreenUnavailable = Boolean(device.screenUnavailable);
+              return (
+                <li
+                  key={device.deviceId}
+                  className="flex flex-col gap-3 px-4 py-3.5 transition-colors hover:bg-[#F5F6F4]/50 md:grid md:grid-cols-[minmax(190px,1.5fr)_130px_185px_165px_170px] md:items-center md:gap-4"
+                >
+                  <div className="flex items-start gap-3">
+                    <span
+                      className={`mt-0.5 shrink-0 ${
+                        isScreenUnavailable ? "text-[#B54708]" : "text-[#525D63]"
                       }`}
                     >
                       {isScreenUnavailable ? (
-                        <MonitorOff className="h-5 w-5" aria-hidden="true" />
+                        <MonitorOff className="h-4 w-4" aria-hidden="true" />
                       ) : (
-                        <Monitor className="h-5 w-5" aria-hidden="true" />
+                        <Monitor className="h-4 w-4" aria-hidden="true" />
                       )}
-                    </div>
-                    <div>
-                      <h2 className="text-base font-semibold text-[#14181B]">{device.alias}</h2>
-                      <p className="text-xs text-[#4A524E]">
-                        Owner: {device.ownerName} · {device.osName}
+                    </span>
+                    <div className="min-w-0">
+                      <h2 className="truncate text-sm font-semibold text-[#111618]">
+                        {device.alias}
+                      </h2>
+                      <p className="text-xs text-[#525D63]">
+                        {device.ownerName} · {device.osName}
                       </p>
                     </div>
                   </div>
-                  <span
-                    className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${
-                      isScreenUnavailable
-                        ? "border-[#B54708]/30 bg-[#FEF0C7] text-[#B54708]"
-                        : PRESENCE_STYLES[device.presence]
-                    }`}
-                  >
-                    {isScreenUnavailable
-                      ? "Screen unavailable"
-                      : PRESENCE_LABELS[device.presence]}
-                  </span>
-                </div>
 
-                {device.presence === "in_session" && device.activeRequester && (
-                  <p className="mt-2.5 rounded-lg bg-[#E3F1EE] px-2.5 py-1 text-xs font-medium text-[#074A40]">
-                    In session with {device.activeRequester}
-                  </p>
-                )}
-
-                {device.presence === "offline" && (
-                  <p className="mt-2.5 text-xs text-[#5C6560]">
-                    Last seen <span className="font-mono-code">{device.lastSeenUtc}</span>
-                  </p>
-                )}
-
-                <div className="mt-4 space-y-2 rounded-lg bg-[#F5F6F4] p-3">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-[#4A524E]">Device ID</span>
-                    <span className="font-mono-code text-sm font-semibold text-[#14181B]">
+                  <div className="flex items-center justify-between md:block">
+                    <span className="text-xs text-[#525D63] md:hidden">Device ID</span>
+                    <span className="font-mono-code text-sm font-medium text-[#111618]">
                       {device.deviceId}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-[#4A524E]">Access mode</span>
-                    <span className="font-medium text-[#14181B]">Asks first</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2 text-xs">
-                    <span className="text-[#4A524E]">Server</span>
+
+                  <div className="flex items-center justify-between md:block">
+                    <span className="text-xs text-[#525D63] md:hidden">Server</span>
                     {device.enrolledServer ? (
-                      <span className="inline-flex items-center gap-1 rounded-md bg-[#E3F1EE] px-2 py-0.5 font-medium text-[#074A40]">
-                        <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-                        {device.serverDomain}
+                      <span className="inline-flex items-center gap-1.5 font-mono-code text-xs font-medium text-[#0F5C52]">
+                        <ShieldCheck className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        <span className="truncate">{device.serverDomain}</span>
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 rounded-md bg-[#FEF0C7] px-2 py-0.5 font-medium text-[#B54708]">
-                        <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" />
-                        {device.serverDomain}
+                      <span className="inline-flex items-center gap-1.5 font-mono-code text-xs font-medium text-[#B54708]">
+                        <ShieldAlert className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        <span className="truncate">{device.serverDomain}</span>
                       </span>
                     )}
                   </div>
-                </div>
-              </div>
 
-              <div className="mt-4">
-                {device.presence === "offline" ? (
-                  <button
-                    type="button"
-                    aria-pressed={Boolean(device.notifyWhenOnline)}
-                    onClick={() => onToggleNotify(device.deviceId)}
-                    className={`inline-flex w-full items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[#0F7B6C] ${
-                      device.notifyWhenOnline
-                        ? "border-[#0F7B6C] bg-[#E3F1EE] text-[#074A40]"
-                        : "border-[#DADDD8] bg-white text-[#14181B] hover:bg-[#F5F6F4]"
-                    }`}
-                  >
-                    {device.notifyWhenOnline ? (
-                      <>
-                        <BellRing className="h-4 w-4" aria-hidden="true" />
-                        Notifying when online
-                      </>
-                    ) : (
-                      <>
-                        <Bell className="h-4 w-4 text-[#0F7B6C]" aria-hidden="true" />
-                        Notify me when online
-                      </>
+                  <div>
+                    <div className="flex items-center gap-2 text-xs font-medium text-[#111618]">
+                      <span
+                        aria-hidden="true"
+                        className={`h-2 w-2 shrink-0 rounded-full ${
+                          isScreenUnavailable
+                            ? "bg-[#B54708]"
+                            : device.presence === "offline"
+                              ? "bg-[#8A938E]"
+                              : "bg-[#0F5C52]"
+                        }`}
+                      />
+                      <span>
+                        {isScreenUnavailable
+                          ? "Screen unavailable"
+                          : PRESENCE_LABELS[device.presence]}
+                      </span>
+                    </div>
+                    {device.presence === "in_session" && device.activeRequester && (
+                      <p className="mt-0.5 pl-4 text-[11px] text-[#525D63]">
+                        With {device.activeRequester}
+                      </p>
                     )}
-                  </button>
-                ) : isScreenUnavailable ? (
-                  <button
-                    type="button"
-                    onClick={() => onConnect(device)}
-                    className="w-full rounded-lg border border-[#B54708]/40 bg-[#FEF0C7] px-4 py-2.5 text-sm font-semibold text-[#B54708] transition-colors hover:bg-[#FDE6A0] focus:outline-none focus:ring-2 focus:ring-[#B54708]"
-                  >
-                    View fix &amp; retry
-                  </button>
-                ) : device.presence === "in_session" ? (
-                  <button
-                    type="button"
-                    onClick={() => onConnect(device)}
-                    className="w-full rounded-lg border border-[#0F7B6C] bg-[#E3F1EE] px-4 py-2.5 text-sm font-semibold text-[#074A40] transition-colors hover:bg-[#D2E9E4] focus:outline-none focus:ring-2 focus:ring-[#0F7B6C]"
-                  >
-                    Ask to join
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => onConnect(device)}
-                    className="w-full rounded-lg bg-[#0F7B6C] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#0A6457] focus:outline-none focus:ring-2 focus:ring-[#0F7B6C] focus:ring-offset-2"
-                  >
-                    Request access
-                  </button>
-                )}
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+                    {device.presence === "offline" && (
+                      <p className="mt-0.5 pl-4 font-mono-code text-[11px] text-[#525D63]">
+                        {device.lastSeenUtc}
+                      </p>
+                    )}
+                  </div>
 
-      {filteredDevices.length === 0 && (
-        <div className="rounded-xl border border-[#DADDD8] bg-white p-8 text-center">
-          <p className="text-sm font-medium text-[#14181B]">No matching devices found.</p>
-          <p className="mt-1 text-sm text-[#4A524E]">
-            Check the 9-digit device ID or clear your status filter.
-          </p>
-        </div>
-      )}
+                  <div className="md:flex md:justify-end">
+                    {device.presence === "offline" ? (
+                      <button
+                        type="button"
+                        aria-pressed={Boolean(device.notifyWhenOnline)}
+                        onClick={() => onToggleNotify(device.deviceId)}
+                        className={`inline-flex min-h-[40px] w-full items-center justify-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C52] md:min-h-[34px] md:w-auto ${
+                          device.notifyWhenOnline
+                            ? "border-[#0F5C52] bg-[#E6F2F0] text-[#083630]"
+                            : "border-[#DADDD8] bg-white text-[#111618] hover:bg-[#F5F6F4]"
+                        }`}
+                      >
+                        {device.notifyWhenOnline ? (
+                          <>
+                            <BellRing className="h-3.5 w-3.5" aria-hidden="true" />
+                            Notifying when online
+                          </>
+                        ) : (
+                          <>
+                            <Bell className="h-3.5 w-3.5 text-[#0F5C52]" aria-hidden="true" />
+                            Notify me when online
+                          </>
+                        )}
+                      </button>
+                    ) : isScreenUnavailable ? (
+                      <button
+                        type="button"
+                        onClick={() => onConnect(device)}
+                        className="min-h-[40px] w-full rounded-md border border-[#B54708]/50 bg-[#FEF0C7] px-3 py-1.5 text-xs font-semibold text-[#7A2E0E] transition-colors hover:bg-[#FDE6A0] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B54708] md:min-h-[34px] md:w-auto"
+                      >
+                        View fix &amp; retry
+                      </button>
+                    ) : device.presence === "in_session" ? (
+                      <button
+                        type="button"
+                        onClick={() => onConnect(device)}
+                        className="min-h-[40px] w-full rounded-md border border-[#0F5C52] bg-[#E6F2F0] px-3.5 py-1.5 text-xs font-semibold text-[#083630] transition-colors hover:bg-[#D5E9E5] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C52] md:min-h-[34px] md:w-auto"
+                      >
+                        Ask to join
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => onConnect(device)}
+                        className="min-h-[40px] w-full rounded-md bg-[#0F5C52] px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#0B473F] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C52] focus-visible:ring-offset-1 md:min-h-[34px] md:w-auto"
+                      >
+                        Request access
+                      </button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <div className="px-4 py-10 text-center">
+            <p className="text-sm font-medium text-[#111618]">No matching devices found.</p>
+            <p className="mt-1 text-sm text-[#525D63]">
+              Check the 9-digit device ID or clear your status filter.
+            </p>
+          </div>
+        )}
+      </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section
-          aria-labelledby="support-links-heading"
-          className="rounded-xl border border-[#DADDD8] bg-white p-5 shadow-xs"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="grid border border-[#DADDD8] bg-white divide-y divide-[#DADDD8] lg:grid-cols-2 lg:divide-x lg:divide-y-0">
+        <section aria-labelledby="support-links-heading" className="p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 id="support-links-heading" className="text-base font-semibold text-[#14181B]">
+              <h2 id="support-links-heading" className="text-base font-semibold text-[#111618]">
                 15-Minute One-Time Support Links
               </h2>
-              <p className="mt-0.5 text-xs text-[#4A524E]">
+              <p className="mt-0.5 text-xs text-[#525D63]">
                 Single-use links expire after 15 minutes and stay bound to the enrolled server domain.
               </p>
             </div>
@@ -394,7 +400,7 @@ export const DevicesScreen: React.FC<DevicesScreenProps> = ({
               <button
                 type="button"
                 onClick={() => handleIssue15MinLink(devices[0]!)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[#0F7B6C] bg-[#E3F1EE] px-3 py-1.5 text-xs font-semibold text-[#074A40] hover:bg-[#D2E9E4] focus:outline-none focus:ring-2 focus:ring-[#0F7B6C]"
+                className="inline-flex min-h-[34px] items-center gap-1.5 rounded-md border border-[#0F5C52] bg-[#E6F2F0] px-3 py-1.5 text-xs font-semibold text-[#083630] hover:bg-[#D5E9E5] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F5C52]"
               >
                 <Link2 className="h-3.5 w-3.5" aria-hidden="true" />
                 Issue 15-min link
@@ -403,20 +409,29 @@ export const DevicesScreen: React.FC<DevicesScreenProps> = ({
           </div>
 
           {linkStatusMessage && (
-            <p role="status" className="mt-3 rounded-lg bg-[#E3F1EE] px-3 py-2 text-xs font-medium text-[#074A40]">
+            <p
+              role="status"
+              className="mt-3 border border-[#0F5C52]/30 bg-[#E6F2F0] px-3 py-2 text-xs font-medium text-[#083630]"
+            >
               {linkStatusMessage}
             </p>
           )}
           {linkErrorMessage && (
-            <p role="alert" className="mt-3 rounded-lg bg-[#FEE4E2] px-3 py-2 text-xs font-medium text-[#912018]">
+            <p
+              role="alert"
+              className="mt-3 border border-[#B42318]/30 bg-[#FEE4E2] px-3 py-2 text-xs font-medium text-[#912018]"
+            >
               {linkErrorMessage}
             </p>
           )}
 
           {supportLinks.length > 0 && (
-            <div className="mt-3 space-y-2.5">
+            <div className="mt-4 space-y-3 border-t border-[#DADDD8] pt-3">
               <div>
-                <label htmlFor="support-link-domain-check" className="block text-xs font-medium text-[#4A524E]">
+                <label
+                  htmlFor="support-link-domain-check"
+                  className="block text-xs font-medium text-[#525D63]"
+                >
                   Enrolled server domain check
                 </label>
                 <input
@@ -424,71 +439,68 @@ export const DevicesScreen: React.FC<DevicesScreenProps> = ({
                   type="text"
                   value={linkVerifyDomain}
                   onChange={(e) => setLinkVerifyDomain(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-[#DADDD8] bg-white px-2.5 py-1.5 font-mono-code text-xs text-[#14181B]"
+                  className="mt-1 w-full rounded-md border border-[#DADDD8] bg-white px-2.5 py-1.5 font-mono-code text-xs text-[#111618] focus:border-[#0F5C52] focus:outline-none"
                 />
               </div>
-              {supportLinks.map((link) => (
-                <div
-                  key={link.linkId}
-                  className="rounded-lg border border-[#DADDD8] bg-[#F5F6F4] p-3 text-xs"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-semibold text-[#14181B]">{link.deviceAlias}</span>
-                    <span className="inline-flex items-center gap-1 rounded bg-[#E3F1EE] px-2 py-0.5 font-mono-code text-[11px] font-semibold text-[#074A40]">
-                      <Clock className="h-3 w-3" aria-hidden="true" />
-                      {link.redeemed ? "Redeemed" : "15:00 max"}
-                    </span>
+
+              <div className="divide-y divide-[#DADDD8] border border-[#DADDD8]">
+                {supportLinks.map((link) => (
+                  <div key={link.linkId} className="bg-[#F5F6F4]/60 p-3 text-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-[#111618]">{link.deviceAlias}</span>
+                      <span className="inline-flex items-center gap-1 font-mono-code text-[11px] font-semibold text-[#0F5C52]">
+                        <Clock className="h-3 w-3" aria-hidden="true" />
+                        {link.redeemed ? "Redeemed" : "15:00 max"}
+                      </span>
+                    </div>
+                    <p className="mt-1 break-all font-mono-code text-[11px] text-[#525D63]">
+                      {link.supportUrl}
+                    </p>
+                    <div className="mt-2.5 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleRedeemLink(link, 0)}
+                        className="rounded-md bg-[#0F5C52] px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-[#0B473F]"
+                      >
+                        Redeem link
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRedeemLink(link, SUPPORT_LINK_TTL_MS + 1000)}
+                        className="rounded-md border border-[#DADDD8] bg-white px-2.5 py-1.5 text-xs font-medium text-[#111618] hover:bg-[#F5F6F4]"
+                      >
+                        Test &gt;15m expiry
+                      </button>
+                    </div>
                   </div>
-                  <p className="mt-1 break-all font-mono-code text-[11px] text-[#4A524E]">
-                    {link.supportUrl}
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleRedeemLink(link, 0)}
-                      className="rounded-md bg-[#0F7B6C] px-2.5 py-1 text-xs font-medium text-white hover:bg-[#0A6457]"
-                    >
-                      Redeem link
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleRedeemLink(link, SUPPORT_LINK_TTL_MS + 1000)}
-                      className="rounded-md border border-[#DADDD8] bg-white px-2.5 py-1 text-xs font-medium text-[#14181B] hover:bg-[#F5F6F4]"
-                    >
-                      Test &gt;15m expiry
-                    </button>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
         </section>
 
-        <section
-          aria-labelledby="abuse-report-heading"
-          className="rounded-xl border border-[#DADDD8] bg-white p-5 shadow-xs"
-        >
+        <section aria-labelledby="abuse-report-heading" className="p-5">
           <div className="flex items-center gap-2">
             <ShieldBan className="h-4 w-4 text-[#B42318]" aria-hidden="true" />
-            <h2 id="abuse-report-heading" className="text-base font-semibold text-[#14181B]">
+            <h2 id="abuse-report-heading" className="text-base font-semibold text-[#111618]">
               Block Requester &amp; Report Abuse
             </h2>
           </div>
-          <p className="mt-0.5 text-xs text-[#4A524E]">
+          <p className="mt-0.5 text-xs text-[#525D63]">
             Automatic 15-minute lockout triggers after 3 denials/mismatches. Block and report suspected scam callers immediately.
           </p>
 
-          <form onSubmit={handleSubmitAbuse} className="mt-3 space-y-2.5 text-xs">
-            <div className="grid gap-2 sm:grid-cols-2">
+          <form onSubmit={handleSubmitAbuse} className="mt-3.5 space-y-2.5 text-xs">
+            <div className="grid gap-2.5 sm:grid-cols-2">
               <div>
-                <label htmlFor="abuse-device-select" className="block font-medium text-[#4A524E]">
+                <label htmlFor="abuse-device-select" className="block font-medium text-[#525D63]">
                   Target device
                 </label>
                 <select
                   id="abuse-device-select"
                   value={abuseDeviceId}
                   onChange={(e) => setAbuseDeviceId(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-[#DADDD8] bg-white px-2.5 py-1.5 text-xs text-[#14181B]"
+                  className="mt-1 w-full rounded-md border border-[#DADDD8] bg-white px-2.5 py-1.5 text-xs text-[#111618] focus:border-[#0F5C52] focus:outline-none"
                 >
                   {devices.map((d) => (
                     <option key={d.deviceId} value={d.deviceId}>
@@ -498,14 +510,14 @@ export const DevicesScreen: React.FC<DevicesScreenProps> = ({
                 </select>
               </div>
               <div>
-                <label htmlFor="abuse-category-select" className="block font-medium text-[#4A524E]">
+                <label htmlFor="abuse-category-select" className="block font-medium text-[#525D63]">
                   Category
                 </label>
                 <select
                   id="abuse-category-select"
                   value={abuseCategory}
                   onChange={(e) => setAbuseCategory(e.target.value as AbuseCategory)}
-                  className="mt-1 w-full rounded-lg border border-[#DADDD8] bg-white px-2.5 py-1.5 text-xs text-[#14181B]"
+                  className="mt-1 w-full rounded-md border border-[#DADDD8] bg-white px-2.5 py-1.5 text-xs text-[#111618] focus:border-[#0F5C52] focus:outline-none"
                 >
                   <option value="scam_attempt">Scam attempt</option>
                   <option value="impersonation">Impersonation</option>
@@ -515,7 +527,7 @@ export const DevicesScreen: React.FC<DevicesScreenProps> = ({
               </div>
             </div>
             <div>
-              <label htmlFor="abuse-requester-input" className="block font-medium text-[#4A524E]">
+              <label htmlFor="abuse-requester-input" className="block font-medium text-[#525D63]">
                 Requester identity or key
               </label>
               <input
@@ -524,11 +536,11 @@ export const DevicesScreen: React.FC<DevicesScreenProps> = ({
                 value={abuseRequester}
                 onChange={(e) => setAbuseRequester(e.target.value)}
                 placeholder="caller@untrusted.example"
-                className="mt-1 w-full rounded-lg border border-[#DADDD8] bg-white px-2.5 py-1.5 text-xs text-[#14181B]"
+                className="mt-1 w-full rounded-md border border-[#DADDD8] bg-white px-2.5 py-1.5 text-xs text-[#111618] placeholder:text-[#525D63] focus:border-[#0F5C52] focus:outline-none"
               />
             </div>
             <div>
-              <label htmlFor="abuse-summary-input" className="block font-medium text-[#4A524E]">
+              <label htmlFor="abuse-summary-input" className="block font-medium text-[#525D63]">
                 Incident summary (metadata only)
               </label>
               <input
@@ -537,19 +549,22 @@ export const DevicesScreen: React.FC<DevicesScreenProps> = ({
                 value={abuseSummary}
                 onChange={(e) => setAbuseSummary(e.target.value)}
                 placeholder="Claimed to be bank fraud support"
-                className="mt-1 w-full rounded-lg border border-[#DADDD8] bg-white px-2.5 py-1.5 text-xs text-[#14181B]"
+                className="mt-1 w-full rounded-md border border-[#DADDD8] bg-white px-2.5 py-1.5 text-xs text-[#111618] placeholder:text-[#525D63] focus:border-[#0F5C52] focus:outline-none"
               />
             </div>
             <button
               type="submit"
-              className="w-full rounded-lg bg-[#B42318] px-3 py-2 text-xs font-semibold text-white hover:bg-[#912018]"
+              className="min-h-[38px] w-full rounded-md bg-[#B42318] px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#912018] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B42318]"
             >
               Block &amp; submit abuse report
             </button>
           </form>
 
           {abuseConfirmation && (
-            <p role="status" className="mt-3 rounded-lg bg-[#FEE4E2] px-3 py-2 text-xs font-medium text-[#912018]">
+            <p
+              role="status"
+              className="mt-3 border border-[#B42318]/30 bg-[#FEE4E2] px-3 py-2 text-xs font-medium text-[#912018]"
+            >
               {abuseConfirmation}
             </p>
           )}
