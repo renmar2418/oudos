@@ -418,6 +418,62 @@ impl HostDesktopState {
         params: &IncomingRequestParams,
         now: DateTime<Utc>,
     ) -> Result<HostSnapshot, CaptureError> {
+        self.receive_incoming_request_inner(params, now, false)
+    }
+
+    /// Dev-only (`#[cfg(debug_assertions)]`) usability probe helper that runs the full handshake
+    /// and consent card pipeline even when `server_enrolled` is `false`, so facilitators can
+    /// render the amber `Personal / Unverified` card during `OUDOS_DEV_HARNESS=1` testing.
+    ///
+    /// # Errors
+    /// Fails closed on validation, handshake, or state-machine errors.
+    #[cfg(debug_assertions)]
+    pub fn receive_incoming_request_dev_preview(
+        &mut self,
+        params: &IncomingRequestParams,
+        now: DateTime<Utc>,
+    ) -> Result<HostSnapshot, CaptureError> {
+        self.receive_incoming_request_inner(params, now, true)
+    }
+
+    /// Dev-only (`#[cfg(debug_assertions)]`) reset returning any active session, pending prompt,
+    /// or alert state back to `Idle` for sequential usability testing.
+    #[cfg(debug_assertions)]
+    pub fn dev_reset_to_idle(&mut self, now: DateTime<Utc>) -> HostSnapshot {
+        if self.active.is_some() {
+            let _ = self.end_session_local(InputOrigin::LocalHost, now);
+        }
+        if self.pending.is_some() {
+            let _ = self.deny_session(now);
+        }
+        self.pending = None;
+        self.active = None;
+        self.gatekeeper = None;
+        self.protected_surfaces
+            .clear_surface(ProtectedSurfaceKind::ConsentPrompt);
+        self.protected_surfaces
+            .clear_surface(ProtectedSurfaceKind::SessionBanner);
+        if matches!(
+            self.consent_machine.state(),
+            ConsentState::BlockedAlert(_)
+                | ConsentState::DeniedLogged(_)
+                | ConsentState::RevokedLogged(_)
+        ) {
+            let _ = self
+                .consent_machine
+                .apply(ConsentEvent::AcknowledgeTerminal);
+        }
+        self.tray_state = TrayVisualState::Idle;
+        self.alert_message = None;
+        self.snapshot(now)
+    }
+
+    fn receive_incoming_request_inner(
+        &mut self,
+        params: &IncomingRequestParams,
+        now: DateTime<Utc>,
+        allow_unenrolled_ui_preview: bool,
+    ) -> Result<HostSnapshot, CaptureError> {
         if matches!(
             self.consent_machine.state(),
             ConsentState::BlockedAlert(_)
@@ -449,12 +505,13 @@ impl HostDesktopState {
 
         let requester_allowed =
             params.rate_limit_passed && !self.is_requester_blocked_or_locked(&viewer_pubkey, now);
+        let machine_server_enrolled = params.server_enrolled || allow_unenrolled_ui_preview;
         let req_res = self.consent_machine.apply(ConsentEvent::RequestIncoming {
             session_id: params.session_id,
             viewer_pubkey,
             server_domain: server_domain.clone(),
             authenticated_requester: params.authenticated_requester,
-            server_enrolled: params.server_enrolled,
+            server_enrolled: machine_server_enrolled,
             rate_limit_passed: requester_allowed,
             host_key_matches_pin: params.host_key_matches_pin,
             first_time_requester: params.first_time_requester,

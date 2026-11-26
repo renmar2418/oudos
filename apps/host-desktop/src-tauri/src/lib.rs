@@ -4,6 +4,9 @@
 pub mod host_state;
 pub mod tray;
 
+#[cfg(debug_assertions)]
+mod dev_harness;
+
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -114,37 +117,82 @@ fn present_incoming_request(
     tray_ui: State<'_, Mutex<TrayUiHandle>>,
     payload: IncomingConnectionPayload,
 ) -> Result<HostSnapshot, String> {
+    present_incoming_request_impl(&app, &state, &tray_ui, payload, false)
+}
+
+pub(crate) fn present_incoming_request_impl(
+    app: &AppHandle,
+    state: &SharedHostState,
+    tray_ui: &Mutex<TrayUiHandle>,
+    payload: IncomingConnectionPayload,
+    dev_unenrolled_preview: bool,
+) -> Result<HostSnapshot, String> {
     let snap = {
         let mut guard = state
             .inner
             .lock()
             .map_err(|_| "host state lock poisoned".to_owned())?;
-        let res = guard.receive_incoming_request(
-            &IncomingRequestParams {
-                session_id: Uuid::now_v7(),
-                requester_name: payload.requester_name,
-                viewer_keys: IdentityKeyPair::generate(),
-                server_domain: payload.server_domain,
-                server_enrolled: payload.server_enrolled,
-                host_key_matches_pin: true,
-                authenticated_requester: true,
-                rate_limit_passed: true,
-                first_time_requester: payload.first_time_requester,
-                requested_permissions: HostPermissionSelection::default(),
-            },
-            Utc::now(),
-        );
+        let params = IncomingRequestParams {
+            session_id: Uuid::now_v7(),
+            requester_name: payload.requester_name,
+            viewer_keys: IdentityKeyPair::generate(),
+            server_domain: payload.server_domain,
+            server_enrolled: payload.server_enrolled,
+            host_key_matches_pin: true,
+            authenticated_requester: true,
+            rate_limit_passed: true,
+            first_time_requester: payload.first_time_requester,
+            requested_permissions: HostPermissionSelection::default(),
+        };
+        #[cfg(debug_assertions)]
+        let res = if dev_unenrolled_preview {
+            guard.receive_incoming_request_dev_preview(&params, Utc::now())
+        } else {
+            guard.receive_incoming_request(&params, Utc::now())
+        };
+        #[cfg(not(debug_assertions))]
+        let res = {
+            let _ = dev_unenrolled_preview;
+            guard.receive_incoming_request(&params, Utc::now())
+        };
         match res {
             Ok(s) => s,
             Err(e) => {
                 let s = guard.snapshot(Utc::now());
                 drop(guard);
-                sync_windows_and_tray(&app, &state, &tray_ui, &s);
+                sync_windows_and_tray(app, state, tray_ui, &s);
                 return Err(e.to_string());
             }
         }
     };
-    sync_windows_and_tray(&app, &state, &tray_ui, &snap);
+    sync_windows_and_tray(app, state, tray_ui, &snap);
+    if let Some(consent_win) = app.get_webview_window("consent") {
+        let _ = consent_win.unminimize();
+        let _ = consent_win.show();
+        let _ = consent_win.set_focus();
+    }
+    Ok(snap)
+}
+
+#[cfg(debug_assertions)]
+pub(crate) fn dev_reset_host_impl(
+    app: &AppHandle,
+    state: &SharedHostState,
+    tray_ui: &Mutex<TrayUiHandle>,
+) -> Result<HostSnapshot, String> {
+    let snap = {
+        let mut guard = state
+            .inner
+            .lock()
+            .map_err(|_| "host state lock poisoned".to_owned())?;
+        guard.dev_reset_to_idle(Utc::now())
+    };
+    sync_windows_and_tray(app, state, tray_ui, &snap);
+    if let Some(consent_win) = app.get_webview_window("consent") {
+        let _ = consent_win.unminimize();
+        let _ = consent_win.show();
+        let _ = consent_win.set_focus();
+    }
     Ok(snap)
 }
 
@@ -511,6 +559,11 @@ fn setup_host_agent(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Erro
             sync_windows_and_tray(&app_handle, &host_state, &tray_ui, &snap);
         }
     });
+
+    #[cfg(debug_assertions)]
+    if std::env::var("OUDOS_DEV_HARNESS").as_deref() == Ok("1") {
+        dev_harness::spawn_loopback_server(app.handle().clone());
+    }
 
     Ok(())
 }

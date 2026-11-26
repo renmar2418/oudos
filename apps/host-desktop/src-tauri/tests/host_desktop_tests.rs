@@ -633,3 +633,56 @@ fn three_denials_trigger_automatic_lockout_and_block_report_persists() {
     .is_err());
     assert!(verify_chain(state.audit_chain().entries(), &host_pubkey).is_ok());
 }
+
+#[cfg(debug_assertions)]
+#[test]
+fn dev_harness_preview_and_reset_restore_idle_while_production_still_blocks_unenrolled() {
+    let host_keys = IdentityKeyPair::generate();
+    let mut state = HostDesktopState::with_default_policy(host_keys);
+    let t0 = Utc::now();
+
+    let scenario_b = IncomingRequestParams {
+        session_id: Uuid::now_v7(),
+        requester_name: "Bank Fraud Desk".to_owned(),
+        viewer_keys: IdentityKeyPair::generate(),
+        server_domain: "help-desk.invalid".to_owned(),
+        server_enrolled: false,
+        host_key_matches_pin: true,
+        authenticated_requester: true,
+        rate_limit_passed: true,
+        first_time_requester: true,
+        requested_permissions: HostPermissionSelection::default(),
+    };
+
+    // Production path MUST continue to fail closed on unenrolled servers.
+    assert!(matches!(
+        state.receive_incoming_request(&scenario_b, t0),
+        Err(CaptureError::GrantError(ProtocolError::ServerNotEnrolled))
+    ));
+    assert_eq!(state.snapshot(t0).tray_state, TrayVisualState::Alert);
+
+    // Dev reset clears alert back to Idle.
+    let reset = state.dev_reset_to_idle(t0 + Duration::seconds(1));
+    assert_eq!(reset.tray_state, TrayVisualState::Idle);
+    assert_eq!(reset.consent_state_name, "IDLE");
+    assert!(reset.pending_request.is_none());
+    assert!(reset.alert_message.is_none());
+
+    // Dev preview renders Scenario B with Personal / Unverified (`server_enrolled == false`)
+    // and 5-second cooling-off while still using real handshake SAS derivation.
+    let preview = state
+        .receive_incoming_request_dev_preview(&scenario_b, t0 + Duration::seconds(2))
+        .expect("dev preview renders scenario B");
+    assert_eq!(preview.consent_state_name, "COOLING_OFF_5S");
+    let req = preview.pending_request.expect("pending scenario B card");
+    assert!(!req.server_enrolled);
+    assert_eq!(req.server_domain, "help-desk.invalid");
+    assert_eq!(req.sas_code.len(), 7);
+
+    // Resetting from pending or active session cleanly returns to Idle.
+    let after_reset = state.dev_reset_to_idle(t0 + Duration::seconds(3));
+    assert_eq!(after_reset.consent_state_name, "IDLE");
+    assert_eq!(after_reset.tray_state, TrayVisualState::Idle);
+    assert!(after_reset.pending_request.is_none());
+    assert!(after_reset.active_banner.is_none());
+}
