@@ -94,3 +94,9 @@ jobs:
         with:
           name: checksums-${{ matrix.platform }}
           path: SHA256SUMS-windows.txt
+
+      - name: Attach Checksums to GitHub Release (Windows)
+        if: startsWith(matrix.platform, 'windows') && hashFiles('SHA256SUMS-windows.txt') != '' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.ref_name }}" SHA256SUMS-windows.txt --clobber
