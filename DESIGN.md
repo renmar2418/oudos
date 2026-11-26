@@ -14,9 +14,20 @@ Oudos (*Ancient Greek: οὐδός — "threshold / doorstep"*) uses a calm, cli
 
 ---
 
-## 2. Brand Mark: Facing Brackets (`32x32`)
+## 2. Brand Mark & Functional State Icons
 
-The Oudos mark is a monochrome geometric threshold rendered on a canonical `32x32` viewBox (`stroke="currentColor"`, `strokeWidth="2.5"`, `strokeLinecap="round"`, `strokeLinejoin="round"`).
+### Primary Architectural Threshold Mark (`16x16`)
+
+The canonical Oudos brand mark (`docs/assets/brand/oudos-mark.svg`) consists of **two interlocking L-shapes**—a lintel with its left jamb and a sill with its right jamb—leaving a stepped threshold passage between them on a pixel-aligned `16x16` grid (`shape-rendering="crispEdges"`):
+
+- **Primary Ink (`#111618`):** [`docs/assets/brand/oudos-mark.svg`](docs/assets/brand/oudos-mark.svg) — light surfaces (`#F5F6F4`, `#FFFFFF`), documentation headers, and print/editorial lockups.
+- **Slate-Teal (`#0F5C52`):** [`docs/assets/brand/oudos-mark-teal.svg`](docs/assets/brand/oudos-mark-teal.svg) — brand accent badges and light headers.
+- **Light Surface (`#F5F6F4`):** [`docs/assets/brand/oudos-mark-light.svg`](docs/assets/brand/oudos-mark-light.svg) — obsidian dark surfaces (`#0E1214`) and GitHub dark mode.
+- **Wordmark Pairing:** The `oudos-mark` SVG paired beside `"Oudos"` set in `Space Grotesk` SemiBold (`600`) with `-0.02em` letter-spacing.
+
+### Functional Host & Tray State Icons: Facing Brackets (`32x32`)
+
+For live session state and Windows tray indicators, Oudos renders monochrome geometric facing brackets on a canonical `32x32` viewBox (`stroke="currentColor"`, `strokeWidth="2.5"`, `strokeLinecap="round"`, `strokeLinejoin="round"`).
 
 All host tray icons and header marks MUST distinguish state by **shape and text, never colour alone** (WCAG 2.2 AA):
 
@@ -27,7 +38,7 @@ All host tray icons and header marks MUST distinguish state by **shape and text,
 | **Alert** | Facing brackets with **center `!`** (`M16 11V17`, dot `cy="20.5"`) + **top-right diamond** (`M27 2L30 5L27 8L24 5L27 2Z`) | Host header: `#B42318` · Web PWA header: `#B42318` brackets + `#B54708` diamond · Windows tray: monochrome `#F5F6F4` |
 
 - **PWA App Tile (`apps/web-pwa/public/icons/icon.svg`):** `64x64` rounded tile (`rx="14"`), white facing brackets (`strokeWidth="4.5"`), and `#5FD9BF` center dot on dark teal background.
-- **Wordmark Pairing:** `FacingBracketsIcon` beside `"Oudos"` set in `Space Grotesk` SemiBold (`600`) with `-0.02em` letter-spacing.
+- **UI Wordmark Pairing:** `FacingBracketsIcon` or `oudos-mark` beside `"Oudos"` set in `Space Grotesk` SemiBold (`600`) with `-0.02em` letter-spacing.
 
 ---
 

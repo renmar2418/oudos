@@ -1,0 +1,917 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Oudos — Consent-First Open Source Remote Desktop</title>
+  <meta
+    name="description"
+    content="Oudos is a GNU AGPL-3.0 consent-first remote desktop system designed to run and self-host on a $0 infrastructure budget. Ask first, then help."
+  />
+  <meta name="theme-color" content="#0F5C52" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&family=Space+Grotesk:wght@500;600&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+
+  <header class="site-header">
+    <div class="container header-inner">
+      <div class="header-left">
+        <a class="brand-lockup" href="#top" aria-label="Oudos home">
+          <img src="/assets/brand/oudos-mark.svg" alt="" width="24" height="24" aria-hidden="true" />
+          <span class="brand-name">Oudos</span>
+        </a>
+        <span class="badge badge-teal">v0.1.0-rc.1</span>
+        <span class="badge badge-neutral">AGPL-3.0</span>
+      </div>
+
+      <button
+        type="button"
+        class="nav-toggle"
+        id="nav-toggle"
+        aria-expanded="false"
+        aria-controls="site-nav"
+        aria-label="Toggle navigation menu"
+      >
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+        <span>Menu</span>
+      </button>
+
+      <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+        <a href="#downloads">Downloads</a>
+        <a href="#verify">Verify</a>
+        <a href="#gallery">Gallery</a>
+        <a href="#self-host">Self-Host</a>
+        <a href="#compare">Architecture</a>
+        <a href="#contact">Feedback</a>
+        <a class="nav-repo" href="https://github.com/renmar2418/oudos" target="_blank" rel="noopener noreferrer">
+          GitHub
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main-content">
+    <!-- HERO & QUICK DOWNLOAD -->
+    <section id="top" class="hero-section">
+      <div class="container hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow">
+            <span>Consent-First Remote Desktop</span>
+            <span class="sep" aria-hidden="true">/</span>
+            <span class="mono-inline">$0 Self-Hostable</span>
+          </p>
+          <h1>Ask first, then help.</h1>
+          <p class="lead-copy">
+            Nothing starts without the device owner's informed yes, every session is end-to-end
+            encrypted, and every session is recorded in a tamper-evident audit log. Device owners
+            can only make rules stricter, never looser.
+          </p>
+
+          <div class="cta-group" aria-label="Primary v0.1.0-rc.1 downloads">
+            <a
+              class="btn btn-primary"
+              href="https://github.com/renmar2418/oudos/releases/download/v0.1.0-rc.1/Oudos_0.1.0_x64_en-US.msi"
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              <span>Download Windows MSI (v0.1.0-rc.1)</span>
+            </a>
+            <a
+              class="btn btn-secondary"
+              href="https://github.com/renmar2418/oudos/releases/download/v0.1.0-rc.1/Oudos_0.1.0_x64-setup.exe"
+            >
+              <span>Windows Setup (.exe)</span>
+            </a>
+            <a
+              class="btn btn-secondary"
+              href="https://github.com/renmar2418/oudos/releases/download/v0.1.0-rc.1/SHA256SUMS-windows.txt"
+            >
+              <span>SHA256SUMS-windows.txt</span>
+            </a>
+            <a
+              class="btn btn-ghost"
+              href="https://github.com/renmar2418/oudos"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <span>GitHub Repository</span>
+            </a>
+          </div>
+
+          <p class="meta-line">
+            Pre-release tag
+            <a href="https://github.com/renmar2418/oudos/releases/tag/v0.1.0-rc.1" target="_blank" rel="noopener noreferrer" class="mono-inline">
+              v0.1.0-rc.1
+            </a>
+            · Direct download, never gated · Licensed under GNU AGPL-3.0
+          </p>
+
+          <dl class="invariant-strip">
+            <div class="invariant-item">
+              <dt>Default Access</dt>
+              <dd>Screen-view only</dd>
+            </div>
+            <div class="invariant-item">
+              <dt>First-Time Wait</dt>
+              <dd>5s cooling-off timer</dd>
+            </div>
+            <div class="invariant-item">
+              <dt>Verification</dt>
+              <dd>Local 6-digit HKDF-SHA256 SAS</dd>
+            </div>
+            <div class="invariant-item">
+              <dt>Screen Blanking</dt>
+              <dd>Disabled in v0.1</dd>
+            </div>
+          </dl>
+        </div>
+
+        <aside class="hero-proof panel" aria-label="Windows host consent card preview">
+          <div class="proof-header">
+            <span class="proof-title">Windows Host Consent Card (520×660)</span>
+            <span class="mono-code proof-tag">Enrolled Domain</span>
+          </div>
+          <figure class="proof-figure">
+            <img
+              src="/assets/screenshots/host-consent-enrolled.png"
+              alt="Oudos host consent prompt for support.example.org displaying 6-digit code 739 204, 5-second Allow timer, and screen-only defaults"
+              width="520"
+              height="660"
+            />
+            <figcaption>
+              Enrolled domain chip (<span class="mono-inline">support.example.org</span>),
+              local 6-digit SAS (<span class="mono-inline">739 204</span>), 5-second disabled
+              <strong>Allow</strong>, and unchecked input/clipboard/file switches.
+            </figcaption>
+          </figure>
+        </aside>
+      </div>
+    </section>
+
+    <!-- CROSS-PLATFORM SUPPORT & DOWNLOADS MATRIX -->
+    <section id="downloads" class="section-block section-border-top">
+      <div class="container">
+        <div class="section-head">
+          <p class="eyebrow">Platform Matrix</p>
+          <h2>Downloads &amp; Honest Release Status</h2>
+          <p class="section-sub">
+            <span class="mono-inline">v0.1.0-rc.1</span> targets Windows 10/11 hosts, a browser-based
+            PWA viewer/console, and a single-command Docker control plane. Later targets are marked
+            transparently without dead download links.
+          </p>
+        </div>
+
+        <div class="matrix-grid">
+          <article class="panel platform-card">
+            <div class="card-top">
+              <div>
+                <p class="platform-role">Host Agent</p>
+                <h3>Windows 10 / 11 (x64)</h3>
+              </div>
+              <span class="badge badge-teal">v0.1.0-rc.1 · Available Now</span>
+            </div>
+            <p class="card-copy">
+              Tauri v2 + Rust host agent with DXGI/GDI screen capture, Win32 synthetic input
+              isolation over consent/banner surfaces, and an always-on-top live session banner.
+            </p>
+            <div class="card-actions">
+              <a
+                class="btn btn-primary btn-sm"
+                href="https://github.com/renmar2418/oudos/releases/download/v0.1.0-rc.1/Oudos_0.1.0_x64_en-US.msi"
+              >
+                Download .msi
+              </a>
+              <a
+                class="btn btn-secondary btn-sm"
+                href="https://github.com/renmar2418/oudos/releases/download/v0.1.0-rc.1/Oudos_0.1.0_x64-setup.exe"
+              >
+                Download .exe
+              </a>
+              <a
+                class="btn btn-ghost btn-sm"
+                href="https://github.com/renmar2418/oudos/releases/download/v0.1.0-rc.1/SHA256SUMS-windows.txt"
+              >
+                SHA256SUMS
+              </a>
+            </div>
+          </article>
+
+          <article class="panel platform-card">
+            <div class="card-top">
+              <div>
+                <p class="platform-role">Viewer &amp; Admin Console</p>
+                <h3>Web Console PWA</h3>
+              </div>
+              <span class="badge badge-teal">v0.1.0-rc.1 · Available Now</span>
+            </div>
+            <p class="card-copy">
+              Installable React + TypeScript PWA running in modern desktop and mobile browsers
+              (Windows, Linux, macOS, Android, iOS) served directly from your self-hosted control
+              plane.
+            </p>
+            <div class="card-actions">
+              <a class="btn btn-secondary btn-sm" href="#self-host">
+                Deploy with Docker Compose
+              </a>
+            </div>
+          </article>
+
+          <article class="panel platform-card platform-roadmap">
+            <div class="card-top">
+              <div>
+                <p class="platform-role">Host Agent</p>
+                <h3>Linux Host (PipeWire + <span class="mono-inline">libei</span>)</h3>
+              </div>
+              <span class="badge badge-neutral">Coming in v0.2</span>
+            </div>
+            <p class="card-copy">
+              Wayland portal capture and <span class="mono-inline">libei</span> input isolation are
+              scheduled for Milestone <span class="mono-inline">v0.2</span>. No Linux host installer
+              is shipped in <span class="mono-inline">v0.1</span>.
+            </p>
+          </article>
+
+          <article class="panel platform-card platform-roadmap">
+            <div class="card-top">
+              <div>
+                <p class="platform-role">Mobile App</p>
+                <h3>Native Android APK (Capacitor)</h3>
+              </div>
+              <span class="badge badge-neutral">Coming in v0.2</span>
+            </div>
+            <p class="card-copy">
+              The Capacitor web bundle builds inside the monorepo, but neither signed nor unsigned
+              APKs are released in <span class="mono-inline">v0.1</span>. Use the Web Console PWA on
+              Android today.
+            </p>
+          </article>
+
+          <article class="panel platform-card platform-roadmap">
+            <div class="card-top">
+              <div>
+                <p class="platform-role">Desktop &amp; Mobile Native</p>
+                <h3>macOS &amp; iOS Native</h3>
+              </div>
+              <span class="badge badge-neutral">Planned for v0.3</span>
+            </div>
+            <p class="card-copy">
+              ScreenCaptureKit macOS host agent and iOS Capacitor wrapper are planned for Milestone
+              <span class="mono-inline">v0.3</span>. iOS browsers can view sessions via the PWA in
+              <span class="mono-inline">v0.1</span>.
+            </p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- STEP-BY-STEP WINDOWS INSTALL & VERIFICATION GUIDE -->
+    <section id="verify" class="section-block section-border-top">
+      <div class="container">
+        <div class="section-head">
+          <p class="eyebrow">Windows Verification</p>
+          <h2>Install &amp; Verify <span class="mono-inline">v0.1.0-rc.1</span> in 3 Steps</h2>
+          <p class="section-sub">
+            Reproducible GitHub Actions builds publish SHA-256 checksums for every Windows
+            artifact. Verify the digest before executing the installer.
+          </p>
+        </div>
+
+        <div class="notice-banner notice-amber" role="note">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+            <line x1="12" y1="9" x2="12" y2="13"></line>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+          <div>
+            <strong>Unsigned Pre-Release Notice:</strong>
+            <span class="mono-inline">v0.1.0-rc.1</span> Windows installers are currently unsigned
+            prior to SignPath Foundation free OSS code signing onboarding (planned once
+            <span class="mono-inline">v0.1.0</span> is tagged). Windows SmartScreen may warn on
+            first run—always match the SHA-256 digest below.
+          </div>
+        </div>
+
+        <ol class="steps-grid">
+          <li class="panel step-card">
+            <div class="step-num mono-code">01</div>
+            <h3>Download the Installer</h3>
+            <p>
+              Grab either the MSI package or NSIS setup executable from the official GitHub release:
+            </p>
+            <ul class="bullet-list">
+              <li>
+                <a href="https://github.com/renmar2418/oudos/releases/download/v0.1.0-rc.1/Oudos_0.1.0_x64_en-US.msi">
+                  <span class="mono-inline">Oudos_0.1.0_x64_en-US.msi</span>
+                </a>
+              </li>
+              <li>
+                <a href="https://github.com/renmar2418/oudos/releases/download/v0.1.0-rc.1/Oudos_0.1.0_x64-setup.exe">
+                  <span class="mono-inline">Oudos_0.1.0_x64-setup.exe</span>
+                </a>
+              </li>
+              <li>
+                <a href="https://github.com/renmar2418/oudos/releases/download/v0.1.0-rc.1/SHA256SUMS-windows.txt">
+                  <span class="mono-inline">SHA256SUMS-windows.txt</span>
+                </a>
+              </li>
+            </ul>
+          </li>
+
+          <li class="panel step-card step-card-wide">
+            <div class="step-num mono-code">02</div>
+            <h3>Verify SHA-256 in PowerShell</h3>
+            <p>
+              Run <span class="mono-inline">Get-FileHash</span> in your Downloads directory and
+              confirm the hash matches the published <span class="mono-inline">v0.1.0-rc.1</span>
+              digests verbatim:
+            </p>
+            <div class="code-block">
+              <div class="code-toolbar">
+                <span class="code-lang mono-code">PowerShell</span>
+                <button
+                  type="button"
+                  class="copy-btn"
+                  data-copy-target="ps-verify-cmd"
+                >
+                  Copy command
+                </button>
+              </div>
+              <pre id="ps-verify-cmd" tabindex="0"><code>Get-FileHash "$HOME\Downloads\Oudos_0.1.0_x64_en-US.msi" -Algorithm SHA256
+Get-FileHash "$HOME\Downloads\Oudos_0.1.0_x64-setup.exe" -Algorithm SHA256</code></pre>
+            </div>
+
+            <div class="digest-table-wrap" tabindex="0" role="region" aria-label="Windows installer SHA-256 checksums">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Artifact</th>
+                    <th scope="col">Expected SHA-256 (<span class="mono-inline">v0.1.0-rc.1</span>)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="mono-code">Oudos_0.1.0_x64_en-US.msi</td>
+                    <td class="mono-code hash-cell">4c5dbb2b9cbcd85c6c461799245719e0bb249fd2e61757ed2ad206ff549075a2</td>
+                  </tr>
+                  <tr>
+                    <td class="mono-code">Oudos_0.1.0_x64-setup.exe</td>
+                    <td class="mono-code hash-cell">8bd4ae629fc437cf1ae3b9e3166beecd7c4182c9c530bdc1b9a781f74c198c6f</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </li>
+
+          <li class="panel step-card">
+            <div class="step-num mono-code">03</div>
+            <h3>Run Your First Asks-First Session</h3>
+            <p>
+              On incoming requests, Oudos enforces four concrete safeguards before any pixel leaves
+              your machine:
+            </p>
+            <ul class="bullet-list">
+              <li><strong>5-second cooling-off timer</strong> disables <strong>Allow</strong> for first-time requesters alongside a plain-English bank/refund/virus warning.</li>
+              <li><strong>Local 6-digit SAS match</strong> derived independently via <span class="mono-inline">HKDF-SHA256</span>—never generated or seen by the server.</li>
+              <li><strong>Screen-only defaults</strong>: mouse &amp; keyboard, clipboard sync, and file transfer all start OFF.</li>
+              <li><strong>Persistent <span class="mono-inline">LIVE</span> banner</strong> stays above all windows with local-input-only <strong>Stop input</strong> and <strong>End session</strong> controls.</li>
+            </ul>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- VISUAL PROOF GALLERY -->
+    <section id="gallery" class="section-block section-border-top">
+      <div class="container">
+        <div class="section-head">
+          <p class="eyebrow">Visual Proof (<span class="mono-inline">v0.1.0-rc.1</span>)</p>
+          <h2>Built for 10-Second Comprehension</h2>
+          <p class="section-sub">
+            Light surfaces separate configuration and consent from obsidian dark
+            (<span class="mono-inline">#0E1214</span>) active viewing chrome so device owners and
+            supporters immediately recognize when a session is live.
+          </p>
+        </div>
+
+        <div class="gallery-grid">
+          <figure class="panel gallery-item">
+            <div class="gallery-frame">
+              <img
+                src="/assets/screenshots/host-consent-enrolled.png"
+                alt="Oudos host consent prompt for an enrolled server domain showing 6-digit code 739 204 and 5-second cooling-off timer"
+                width="520"
+                height="660"
+                loading="lazy"
+              />
+            </div>
+            <figcaption>
+              <strong>Host Consent — Enrolled Server</strong>
+              <span>Shows pinned server domain (<span class="mono-inline">support.example.org</span>), local 6-digit SAS, and 5-second wait.</span>
+            </figcaption>
+          </figure>
+
+          <figure class="panel gallery-item">
+            <div class="gallery-frame">
+              <img
+                src="/assets/screenshots/host-consent-unverified.png"
+                alt="Oudos host consent prompt showing amber Personal / Unverified relay warning for an un-enrolled domain"
+                width="520"
+                height="660"
+                loading="lazy"
+              />
+            </div>
+            <figcaption>
+              <strong>Host Consent — Unverified Relay</strong>
+              <span>Explicit amber <span class="mono-inline">Personal / Unverified</span> banner when a relay domain key is not enrolled on the host.</span>
+            </figcaption>
+          </figure>
+
+          <figure class="panel gallery-item gallery-item-wide">
+            <div class="gallery-frame">
+              <img
+                src="/assets/screenshots/web-devices-desktop.png"
+                alt="Oudos self-hosted web console Devices view with presence, 15-minute one-time support links, and abuse reporting"
+                width="1280"
+                height="800"
+                loading="lazy"
+              />
+            </div>
+            <figcaption>
+              <strong>Self-Hosted Web Console (<span class="mono-inline">apps/web-pwa</span>)</strong>
+              <span>Devices registry, 15-minute single-use support links, monotonic policies, and hash-chained CSV audit log—100% free and AGPL-3.0.</span>
+            </figcaption>
+          </figure>
+        </div>
+
+        <!-- Obsidian dark session showcase: #5FD9BF mint strictly on #0E1214 dark surfaces -->
+        <div class="obsidian-showcase" aria-label="Active session dark chrome showcase">
+          <div class="obsidian-head">
+            <div class="obsidian-brand">
+              <img src="/assets/brand/oudos-mark-light.svg" alt="" width="20" height="20" aria-hidden="true" />
+              <span class="live-pill mono-code">LIVE · DARK SESSION CHROME</span>
+            </div>
+            <p class="obsidian-sub">
+              Obsidian (<span class="mono-inline">#0E1214</span>) isolates live remote viewing and the
+              host termination banner from light configuration screens.
+            </p>
+          </div>
+
+          <div class="obsidian-grid">
+            <figure class="obsidian-card">
+              <img
+                src="/assets/screenshots/host-live-banner.png"
+                alt="Oudos persistent top-most obsidian dark session banner with Stop input and End session controls"
+                width="640"
+                height="56"
+                loading="lazy"
+              />
+              <figcaption>
+                <strong>Persistent Host Banner (640×56 Always-on-Top)</strong>
+                <span>Displays requester, server domain, active permission summary, and local-input-only <strong>Stop input</strong> / <strong>End session</strong> buttons.</span>
+              </figcaption>
+            </figure>
+
+            <figure class="obsidian-card">
+              <img
+                src="/assets/screenshots/web-active-session.png"
+                alt="Oudos obsidian dark active session viewer showing E2E encrypted status, quality selector, latency, and disabled screen blanking"
+                width="1280"
+                height="800"
+                loading="lazy"
+              />
+              <figcaption>
+                <strong>Active Session Viewer</strong>
+                <span>Displays E2E encrypted status, <span class="mono-inline">36 ms</span> telemetry, host-granted capabilities, and <span class="mono-inline">Blank remote screen: Disabled</span>.</span>
+              </figcaption>
+            </figure>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SELF-HOSTING & CONFIGURATION GUIDE -->
+    <section id="self-host" class="section-block section-border-top">
+      <div class="container">
+        <div class="section-head">
+          <p class="eyebrow">Self-Hosting (<span class="mono-inline">deploy/docker-compose.yml</span>)</p>
+          <h2>Run the Full Control Plane in Under 3 Minutes</h2>
+          <p class="section-sub">
+            Zero paywalled tabs. Every command and environment variable below matches
+            <span class="mono-inline">deploy/docker-compose.yml</span> and
+            <span class="mono-inline">deploy/.env.example</span> verbatim.
+          </p>
+        </div>
+
+        <div class="selfhost-grid">
+          <div class="panel command-panel">
+            <h3>1. Base Stack (Direct P2P WebRTC)</h3>
+            <p class="card-copy">
+              Copies <span class="mono-inline">deploy/.env.example</span>, builds
+              <span class="mono-inline">oud-server</span> + <span class="mono-inline">web-pwa</span>,
+              and exposes the console on <span class="mono-inline">http://localhost:8080</span>.
+            </p>
+            <div class="code-block">
+              <div class="code-toolbar">
+                <span class="code-lang mono-code">Bash</span>
+                <button type="button" class="copy-btn" data-copy-target="compose-base-cmd">
+                  Copy commands
+                </button>
+              </div>
+              <pre id="compose-base-cmd" tabindex="0"><code>cp deploy/.env.example deploy/.env
+docker compose -f deploy/docker-compose.yml up -d --build
+curl -fsS http://localhost:8080/health</code></pre>
+            </div>
+          </div>
+
+          <div class="panel command-panel">
+            <h3>2. Optional Compose Profiles</h3>
+            <p class="card-copy">
+              Enable automatic Caddy HTTPS (<span class="mono-inline">deploy/Caddyfile</span>,
+              requires <span class="mono-inline">OUD_SERVER_DOMAIN</span>) or self-hosted
+              <span class="mono-inline">coturn</span> TURN relay fallback:
+            </p>
+            <div class="code-block">
+              <div class="code-toolbar">
+                <span class="code-lang mono-code">Caddy HTTPS (--profile tls)</span>
+                <button type="button" class="copy-btn" data-copy-target="compose-tls-cmd">
+                  Copy
+                </button>
+              </div>
+              <pre id="compose-tls-cmd" tabindex="0"><code>docker compose -f deploy/docker-compose.yml --profile tls up -d --build</code></pre>
+            </div>
+
+            <div class="code-block">
+              <div class="code-toolbar">
+                <span class="code-lang mono-code">Self-Hosted TURN (--profile coturn)</span>
+                <button type="button" class="copy-btn" data-copy-target="compose-coturn-cmd">
+                  Copy
+                </button>
+              </div>
+              <pre id="compose-coturn-cmd" tabindex="0"><code>docker compose -f deploy/docker-compose.yml --profile coturn up -d --build</code></pre>
+            </div>
+
+            <p class="tunnel-note">
+              <strong>Using a Cloudflare Tunnel (<span class="mono-inline">cloudflared</span>)?</strong>
+              Run the base stack without <span class="mono-inline">--profile tls</span>, point your
+              tunnel ingress to <span class="mono-inline">http://localhost:8080</span>, and set
+              <span class="mono-inline">OUD_SERVER_DOMAIN</span> in
+              <span class="mono-inline">deploy/.env</span> to your custom hostname (no
+              <span class="mono-inline">https://</span> prefix).
+            </p>
+          </div>
+        </div>
+
+        <div class="panel env-panel">
+          <div class="env-panel-head">
+            <h3>Environment Variables (<span class="mono-inline">deploy/docker-compose.yml</span> &amp; <span class="mono-inline">deploy/.env.example</span>)</h3>
+          </div>
+          <div class="table-scroll" tabindex="0" role="region" aria-label="Environment variables table">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th scope="col">Variable</th>
+                  <th scope="col">Default</th>
+                  <th scope="col">Purpose</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="mono-code">OUD_SERVER_DOMAIN</td>
+                  <td class="mono-code">localhost</td>
+                  <td>Raw domain displayed on Windows host consent cards (no <span class="mono-inline">https://</span>) and used by Caddy / <span class="mono-inline">coturn</span> realm.</td>
+                </tr>
+                <tr>
+                  <td class="mono-code">OUD_HTTP_PORT</td>
+                  <td class="mono-code">8080</td>
+                  <td>Host port mapped to <span class="mono-inline">web-pwa</span> container port <span class="mono-inline">80</span>.</td>
+                </tr>
+                <tr>
+                  <td class="mono-code">OUD_BIND_ADDR</td>
+                  <td class="mono-code">0.0.0.0:8080</td>
+                  <td>Internal listen address for <span class="mono-inline">oud-server</span> inside Compose.</td>
+                </tr>
+                <tr>
+                  <td class="mono-code">OUD_DB_PATH</td>
+                  <td class="mono-code">/var/lib/oudos/oudos.db</td>
+                  <td>SQLite database path persisted in the <span class="mono-inline">oudos_data</span> volume.</td>
+                </tr>
+                <tr>
+                  <td class="mono-code">OUD_SERVER_KEY_PATH</td>
+                  <td class="mono-code">/var/lib/oudos/server.key</td>
+                  <td>Persisted Ed25519 server identity key path in <span class="mono-inline">oudos_data</span>.</td>
+                </tr>
+                <tr>
+                  <td class="mono-code">OUD_SERVER_SEED_HEX</td>
+                  <td class="mono-code">""</td>
+                  <td>Optional 64-hex-char Ed25519 seed; leave empty to auto-generate on first boot.</td>
+                </tr>
+                <tr>
+                  <td class="mono-code">OUD_TURN_MODE</td>
+                  <td class="mono-code">direct_p2p</td>
+                  <td>WebRTC mode: <span class="mono-inline">direct_p2p</span> ($0 STUN), <span class="mono-inline">coturn</span>, or <span class="mono-inline">cloudflare</span>.</td>
+                </tr>
+                <tr>
+                  <td class="mono-code">OUD_STUN_URL</td>
+                  <td class="mono-code">stun:stun.cloudflare.com:3478</td>
+                  <td>Public STUN endpoint used for direct P2P WebRTC NAT traversal.</td>
+                </tr>
+                <tr>
+                  <td class="mono-code">OUD_COTURN_HOST</td>
+                  <td class="mono-code">""</td>
+                  <td>Public hostname for self-hosted <span class="mono-inline">coturn</span> when <span class="mono-inline">OUD_TURN_MODE=coturn</span>.</td>
+                </tr>
+                <tr>
+                  <td class="mono-code">OUD_COTURN_PORT</td>
+                  <td class="mono-code">3478</td>
+                  <td>UDP/TCP listening port for the <span class="mono-inline">coturn</span> profile.</td>
+                </tr>
+                <tr>
+                  <td class="mono-code">OUD_COTURN_TLS_PORT</td>
+                  <td class="mono-code">5349</td>
+                  <td>TURN-over-TLS port passed to <span class="mono-inline">oud-server</span>.</td>
+                </tr>
+                <tr>
+                  <td class="mono-code">OUD_COTURN_SECRET</td>
+                  <td class="mono-code">""</td>
+                  <td>Shared <span class="mono-inline">--static-auth-secret</span> for <span class="mono-inline">coturn</span> (compose falls back to <span class="mono-inline">change-me-coturn-secret</span>).</td>
+                </tr>
+                <tr>
+                  <td class="mono-code">OUD_CF_TURN_TOKEN_ID</td>
+                  <td class="mono-code">""</td>
+                  <td>Cloudflare Realtime TURN Token ID when <span class="mono-inline">OUD_TURN_MODE=cloudflare</span>.</td>
+                </tr>
+                <tr>
+                  <td class="mono-code">OUD_CF_TURN_API_TOKEN</td>
+                  <td class="mono-code">""</td>
+                  <td>Cloudflare Realtime TURN API Token (kept server-side only).</td>
+                </tr>
+                <tr>
+                  <td class="mono-code">RUST_LOG</td>
+                  <td class="mono-code">info</td>
+                  <td>Server log filter (<span class="mono-inline">error</span>, <span class="mono-inline">warn</span>, <span class="mono-inline">info</span>, <span class="mono-inline">debug</span>).</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- HOW OUDOS DIFFERS + HONEST SCOPE -->
+    <section id="compare" class="section-block section-border-top">
+      <div class="container">
+        <div class="section-head">
+          <p class="eyebrow">Threat Posture &amp; Scope</p>
+          <h2>How Oudos Differs &amp; Honest <span class="mono-inline">v0.1.0-rc.1</span> Status</h2>
+          <p class="section-sub">
+            Oudos is engineered to disrupt rushed phone-scam scripts, enforce host-side permissions,
+            and preserve tamper-evident audit logs. No remote-access software can eliminate social
+            engineering—we document exact boundaries instead of making absolutist claims.
+          </p>
+        </div>
+
+        <div class="panel">
+          <div class="table-scroll" tabindex="0" role="region" aria-label="Comparison table">
+            <table class="data-table compare-table">
+              <thead>
+                <tr>
+                  <th scope="col">Capability</th>
+                  <th scope="col">Typical Remote Desktop Tools</th>
+                  <th scope="col">Oudos (<span class="mono-inline">v0.1.0-rc.1</span>)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Consent Model</strong></td>
+                  <td>Unattended passwords or full-control defaults common</td>
+                  <td><strong>Strictly Asks-First:</strong> No unattended mode, no "Until I turn it off" grants; screen-view only by default.</td>
+                </tr>
+                <tr>
+                  <td><strong>Anti-Coercion Cooling-Off</strong></td>
+                  <td>Immediate one-click accept</td>
+                  <td><strong>5-second disabled Allow</strong> + plain-English bank, refund, and virus phone-scam warning for first-time requesters.</td>
+                </tr>
+                <tr>
+                  <td><strong>Anti-Spoofing &amp; Code Match</strong></td>
+                  <td>Server-generated PINs or unpinned relay labels</td>
+                  <td><strong>Pre-paired server key enrollment</strong> with raw domain chip (or amber <span class="mono-inline">Personal / Unverified</span>) + local 6-digit <span class="mono-inline">HKDF-SHA256</span> SAS.</td>
+                </tr>
+                <tr>
+                  <td><strong>Input &amp; Prompt Protection</strong></td>
+                  <td>Remote pointer can often interact with host UI</td>
+                  <td><strong>Host-enforced <span class="mono-inline">SessionGrant</span> gatekeeper</strong> + Win32 synthetic input rejection and rect blocking over consent/banner windows.</td>
+                </tr>
+                <tr>
+                  <td><strong>Screen Blanking</strong></td>
+                  <td>Supported ("curtain mode") on host</td>
+                  <td><strong>Explicitly disabled in v0.1</strong> so device owners always see what happens on their screen.</td>
+                </tr>
+                <tr>
+                  <td><strong>Self-Hosting &amp; Licensing</strong></td>
+                  <td>Proprietary server or paywalled audit/policy tiers</td>
+                  <td><strong>100% GNU AGPL-3.0:</strong> Single <span class="mono-inline">docker compose</span> stack includes devices, 15-minute support links, monotonic policies, and hash-chained CSV audit logs.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="docs-strip">
+          <article class="panel doc-card">
+            <h3>Open Pre-Release Gate: Issue #12 Study</h3>
+            <p>
+              Automated Rust protocol tests, host input-isolation checks, DPI tests, and WCAG 2.2 AA
+              checks are green. Real-world 5-tester 10-second consent comprehension validation remains
+              open prior to final <span class="mono-inline">v0.1.0</span> tagging.
+            </p>
+          </article>
+          <article class="panel doc-card">
+            <h3>Canonical Engineering Docs</h3>
+            <ul class="doc-links">
+              <li>
+                <a href="https://github.com/renmar2418/oudos/blob/main/DESIGN.md" target="_blank" rel="noopener noreferrer">
+                  Design System &amp; Tokens (<span class="mono-inline">DESIGN.md</span>)
+                </a>
+              </li>
+              <li>
+                <a href="https://github.com/renmar2418/oudos/blob/main/docs/THREAT_MODEL.md" target="_blank" rel="noopener noreferrer">
+                  12-Vector Threat Model (<span class="mono-inline">docs/THREAT_MODEL.md</span>)
+                </a>
+              </li>
+              <li>
+                <a href="https://github.com/renmar2418/oudos/blob/main/docs/USABILITY_TEST_SCRIPT.md" target="_blank" rel="noopener noreferrer">
+                  10-Second Usability Test Script (<span class="mono-inline">docs/USABILITY_TEST_SCRIPT.md</span>)
+                </a>
+              </li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- TURNSTILE-PROTECTED VOLUNTEER / FEEDBACK FORM -->
+    <section id="contact" class="section-block section-border-top">
+      <div class="container contact-layout">
+        <div class="contact-info">
+          <p class="eyebrow">Community &amp; Usability Testing</p>
+          <h2>Volunteer for Issue #12 or Send Feedback</h2>
+          <p class="section-sub">
+            Help test the 10-second host consent card with non-technical family members, report
+            self-hosting issues, or share security notes. Downloads above never require a form or
+            bot check.
+          </p>
+          <ul class="bullet-list">
+            <li>For security vulnerabilities, check <a href="https://github.com/renmar2418/oudos/blob/main/.github/SECURITY.md" target="_blank" rel="noopener noreferrer"><span class="mono-inline">.github/SECURITY.md</span></a>.</li>
+            <li>Public bug reports and feature feedback can always be filed on <a href="https://github.com/renmar2418/oudos/issues" target="_blank" rel="noopener noreferrer">GitHub Issues</a>.</li>
+          </ul>
+        </div>
+
+        <div class="panel contact-panel">
+          <div id="contact-fallback" class="contact-fallback">
+            <h3>Submit via GitHub Issues</h3>
+            <p class="card-copy">
+              Live Turnstile form submission is not configured on this static preview. Open an issue
+              directly on GitHub to volunteer for the Issue #12 usability study or report bugs.
+            </p>
+            <a
+              class="btn btn-primary"
+              href="https://github.com/renmar2418/oudos/issues"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open GitHub Issues
+            </a>
+          </div>
+
+          <form id="contact-form" class="contact-form" novalidate hidden>
+            <div
+              id="form-error-summary"
+              class="form-summary form-summary-error"
+              role="alert"
+              tabindex="-1"
+              hidden
+            ></div>
+            <div
+              id="form-success-summary"
+              class="form-summary form-summary-success"
+              role="status"
+              aria-live="polite"
+              hidden
+            ></div>
+
+            <div class="field-group">
+              <label for="contact-name">Your name</label>
+              <input
+                id="contact-name"
+                name="name"
+                type="text"
+                maxlength="120"
+                autocomplete="name"
+                required
+                aria-describedby="contact-name-error"
+              />
+              <p id="contact-name-error" class="field-error" hidden></p>
+            </div>
+
+            <div class="field-group">
+              <label for="contact-email">Reply email</label>
+              <input
+                id="contact-email"
+                name="email"
+                type="email"
+                maxlength="254"
+                autocomplete="email"
+                required
+                aria-describedby="contact-email-error"
+              />
+              <p id="contact-email-error" class="field-error" hidden></p>
+            </div>
+
+            <div class="field-group">
+              <label for="contact-topic">Topic</label>
+              <select
+                id="contact-topic"
+                name="topic"
+                required
+                aria-describedby="contact-topic-error"
+              >
+                <option value="usability-study">Usability Study Volunteer (Issue #12)</option>
+                <option value="bug-report">Windows Host / PWA Bug Report</option>
+                <option value="self-hosting">Self-Hosting / Docker Setup</option>
+                <option value="security-note">Security Posture Question</option>
+              </select>
+              <p id="contact-topic-error" class="field-error" hidden></p>
+            </div>
+
+            <div class="field-group">
+              <label for="contact-message">Message</label>
+              <textarea
+                id="contact-message"
+                name="message"
+                rows="4"
+                minlength="10"
+                maxlength="2000"
+                required
+                aria-describedby="contact-message-error"
+              ></textarea>
+              <p id="contact-message-error" class="field-error" hidden></p>
+            </div>
+
+            <div class="field-group">
+              <div id="turnstile-container" class="turnstile-box"></div>
+              <p id="contact-turnstile-error" class="field-error" hidden></p>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" id="contact-submit" class="btn btn-primary">
+                Send message
+              </button>
+              <a
+                class="btn btn-ghost"
+                href="https://github.com/renmar2418/oudos/issues"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Or open GitHub Issue
+              </a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <img src="/assets/brand/oudos-mark-light.svg" alt="" width="20" height="20" aria-hidden="true" />
+        <span><strong>Oudos</strong> · Consent-first remote desktop · GNU AGPL-3.0</span>
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/renmar2418/oudos" target="_blank" rel="noopener noreferrer">Source</a>
+        <a href="https://github.com/renmar2418/oudos/releases/tag/v0.1.0-rc.1" target="_blank" rel="noopener noreferrer">v0.1.0-rc.1</a>
+        <a href="https://github.com/renmar2418/oudos/blob/main/DESIGN.md" target="_blank" rel="noopener noreferrer">DESIGN.md</a>
+        <a href="https://github.com/renmar2418/oudos/blob/main/docs/THREAT_MODEL.md" target="_blank" rel="noopener noreferrer">Threat Model</a>
+        <a href="https://github.com/renmar2418/oudos/blob/main/.github/SECURITY.md" target="_blank" rel="noopener noreferrer">Security</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>

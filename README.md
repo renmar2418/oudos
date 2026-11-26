@@ -1,3 +1,10 @@
+<p>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/brand/oudos-mark-light.svg" />
+    <img src="docs/assets/brand/oudos-mark.svg" alt="Oudos architectural threshold mark" width="44" height="44" />
+  </picture>
+</p>
+
 # Oudos
 
 **Oudos** (*Ancient Greek: οὐδός — "threshold / doorstep"*) is a Free and Open Source (**GNU AGPL-3.0**) consent-first remote desktop system designed to run and self-host on a **$0 infrastructure budget**.
